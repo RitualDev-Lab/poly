@@ -71,6 +71,26 @@ export class NodeEngine extends BaseEngine {
     return { command: this.activeCli, args: ["install"] };
   }
 
+  resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] } {
+    const args: string[] = [];
+    const pkgTarget = pkg ? this.formatPackageTarget(pkg) : undefined;
+
+    switch (this.activeCli) {
+      case "pnpm":
+      case "bun":
+      case "npm":
+        args.push("update");
+        if (pkgTarget) args.push(pkgTarget);
+        break;
+      case "yarn":
+        args.push("upgrade");
+        if (pkgTarget) args.push(pkgTarget);
+        break;
+    }
+
+    return { command: this.activeCli, args };
+  }
+
   private formatPackageTarget(pkg: PackageSpec): string {
     const base = pkg.namespace ? `${pkg.namespace}/${pkg.name}` : pkg.name;
     return pkg.version ? `${base}@${pkg.version}` : base;

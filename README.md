@@ -104,7 +104,7 @@ poly remove npm:lodash
 poly remove pypi:scikit-learn
 ```
 
-### Installing / Synchronizing
+### Installing & Updating Dependencies
 
 ```bash
 # Sync dependencies for closest project
@@ -112,6 +112,13 @@ poly install
 
 # Synchronize all polyglot projects across an entire monorepo
 poly install --all
+
+# Upgrade specific package to latest compatible version
+poly update npm:zod
+poly update pypi:fastapi
+
+# Upgrade all dependencies across all ecosystems
+poly update
 ```
 
 ### Workspace Operations & Deterministic Lockfiles
@@ -136,6 +143,12 @@ poly run test --filter apps/web
 ```bash
 # Query OSV database for known vulnerabilities across all ecosystems
 poly audit
+
+# Automatically remediate vulnerabilities and patch manifests
+poly fix
+
+# Dry-run remediation without modifying files on disk
+poly fix --dry-run
 
 # Enforce security gates in CI/CD (fails build if HIGH or CRITICAL CVEs exist)
 poly audit --fail-on high

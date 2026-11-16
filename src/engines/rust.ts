@@ -28,4 +28,12 @@ export class RustEngine extends BaseEngine {
   resolveInstallArgs(): { command: string; args: string[] } {
     return { command: "cargo", args: ["fetch"] };
   }
+
+  resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] } {
+    const args = ["update"];
+    if (pkg?.name) {
+      args.push("-p", pkg.name);
+    }
+    return { command: "cargo", args };
+  }
 }

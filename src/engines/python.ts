@@ -75,6 +75,28 @@ export class PythonEngine extends BaseEngine {
     }
   }
 
+  resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] } {
+    switch (this.activeCli) {
+      case "uv":
+        return {
+          command: "uv",
+          args: pkg ? ["lock", "--upgrade-package", pkg.name] : ["lock", "--upgrade"],
+        };
+      case "poetry":
+        return {
+          command: "poetry",
+          args: pkg ? ["update", pkg.name] : ["update"],
+        };
+      case "pip":
+        return {
+          command: "pip",
+          args: pkg
+            ? ["install", "--upgrade", this.formatPackageTarget(pkg)]
+            : ["install", "--upgrade", "-r", "requirements.txt"],
+        };
+    }
+  }
+
   private formatPackageTarget(pkg: PackageSpec): string {
     if (!pkg.version) return pkg.name;
     // Check if version already has an operator like >=, <=, ==

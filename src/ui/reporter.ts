@@ -14,7 +14,7 @@ export function logError(message: string): void {
 }
 
 export function logExecutionPlan(
-  action: "add" | "remove" | "install",
+  action: "add" | "remove" | "install" | "update",
   pkg?: PackageSpec,
   engine?: string,
   command?: string,

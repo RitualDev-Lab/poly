@@ -7,6 +7,7 @@ import {
   CrossStackAuditor,
   LicenseAuditor,
   SbomGenerator,
+  SecurityAutoHealer,
   type VulnerabilitySeverity,
   generateSarifReport,
 } from "./compliance/index.js";
@@ -23,7 +24,7 @@ import {
   writeCompositeLockfile,
 } from "./workspace/index.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const HELP_TEXT = `
 ⚡ poly — The Universal Polyglot CLI Package & Dependency Orchestrator
@@ -36,9 +37,11 @@ COMMANDS:
   add <package...>    Add dependencies (supports shorthand 'npm:zod', 'pypi:fastapi', 'cargo:tokio')
   remove, rm <pkg...> Remove dependencies using the active ecosystem manager
   install, sync, i    Install & sync dependencies across workspace members
+  update, up [pkg...] Upgrade dependencies across all ecosystems
   run <task>          Run cross-stack orchestrated tasks (e.g. 'poly run dev', 'poly run test')
   lock                Manage or verify composite 'poly.lock'
   audit               Scan dependencies across all ecosystems for known security vulnerabilities (OSV)
+  fix [--dry-run]     Automatically patch vulnerabilities discovered during audit
   license             Audit license compliance and detect copyleft contamination risks (GPL/AGPL)
   sbom                Generate compliant CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials
   cache <cmd> [key]   Manage distributed CI dependency cache (save, restore, clean)
@@ -176,6 +179,21 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "update":
+      case "upgrade":
+      case "up": {
+        const dispatcher = new PolyDispatcher();
+        if (positionalArgs.length > 0) {
+          for (const pkg of positionalArgs) {
+            await dispatcher.update(pkg, { silent: isSilent, cwd });
+          }
+        } else {
+          await dispatcher.update(undefined, { all: isAll, silent: isSilent, cwd });
+        }
+        writeCompositeLockfile(cwd);
+        break;
+      }
+
       case "run": {
         const taskName = positionalArgs[0];
         if (!taskName) {
@@ -275,6 +293,42 @@ async function main(): Promise<void> {
         if (report.hasFailure) {
           logError(`Audit failed: Vulnerabilities matching threshold '${failOnRaw}' detected.`);
           process.exit(1);
+        }
+        break;
+      }
+
+      case "fix": {
+        const isDryRun = args.includes("--dry-run");
+        logHeader(
+          `Executing Automated Security Auto-Heal (${isDryRun ? "DRY-RUN" : "APPLYING PATCHES"})...`,
+        );
+        const healer = new SecurityAutoHealer();
+        const report = await healer.fix(cwd, { dryRun: isDryRun, minSeverity: failOnRaw });
+
+        if (isJson) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          console.log(`Scanned ${report.scannedPackages} packages (${report.durationMs}ms).`);
+          console.log(`Total vulnerabilities found: ${report.totalVulnerabilities}`);
+          console.log(`Remediated packages: \x1b[32m${report.fixedCount}\x1b[0m`);
+          console.log(`Unfixable vulnerabilities: \x1b[33m${report.unfixableCount}\x1b[0m\n`);
+
+          for (const r of report.remediated) {
+            console.log(
+              `  \x1b[32m✔\x1b[0m \x1b[1m${r.packageName}\x1b[0m (${r.ecosystem}): bumped \x1b[31m${r.previousVersion}\x1b[0m → \x1b[32m${r.fixedVersion}\x1b[0m`,
+            );
+            console.log(
+              `    ↳ Patched: ${path.relative(cwd, r.manifestPath)} (Resolves: ${r.cveIds.join(", ")})`,
+            );
+          }
+
+          if (report.fixedCount > 0 && !isDryRun) {
+            logSuccess(
+              `Successfully remediated ${report.fixedCount} packages and synchronized poly.lock.`,
+            );
+          } else if (report.fixedCount === 0) {
+            logSuccess("Zero vulnerabilities required patching. Dependencies up-to-date.");
+          }
         }
         break;
       }

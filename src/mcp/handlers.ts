@@ -1,5 +1,9 @@
 import path from "node:path";
-import { CrossStackAuditor, type VulnerabilitySeverity } from "../compliance/index.js";
+import {
+  CrossStackAuditor,
+  SecurityAutoHealer,
+  type VulnerabilitySeverity,
+} from "../compliance/index.js";
 import { detectContexts } from "../detector/index.js";
 import { PolyDispatcher } from "../dispatcher/index.js";
 import { parsePackageSpec } from "../purl/index.js";
@@ -186,6 +190,46 @@ export async function handleToolCall(
 
         return {
           content: [{ type: "text", text: JSON.stringify(drift, null, 2) }],
+        };
+      }
+
+      case "poly_fix_vulnerabilities": {
+        const dryRun = Boolean(args.dryRun);
+        const minSeverity = args.minSeverity as VulnerabilitySeverity | undefined;
+        const healer = new SecurityAutoHealer();
+        const report = await healer.fix(cwd, { dryRun, minSeverity });
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
+        };
+      }
+
+      case "poly_update_dependency": {
+        const pkgInput = args.package ? String(args.package) : undefined;
+        const all = Boolean(args.all);
+        const dispatcher = new PolyDispatcher();
+        const results = await dispatcher.update(pkgInput, { all, cwd, silent: true });
+        writeCompositeLockfile(cwd);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  updatedCount: results.length,
+                  allSucceeded: results.every((r) => r.exitCode === 0),
+                  results: results.map((r) => ({
+                    engine: r.engine,
+                    exitCode: r.exitCode,
+                    durationMs: r.durationMs,
+                  })),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         };
       }
 

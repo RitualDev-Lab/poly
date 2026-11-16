@@ -18,4 +18,9 @@ export class GoEngine extends BaseEngine {
   resolveInstallArgs(): { command: string; args: string[] } {
     return { command: "go", args: ["mod", "download"] };
   }
+
+  resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] } {
+    const target = pkg?.name ? pkg.name : "./...";
+    return { command: "go", args: ["get", "-u", target] };
+  }
 }

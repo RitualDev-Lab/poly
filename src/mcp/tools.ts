@@ -127,4 +127,50 @@ export const POLY_MCP_TOOLS: McpTool[] = [
       },
     },
   },
+  {
+    name: "poly_fix_vulnerabilities",
+    description:
+      "Automatically remediate and patch security vulnerabilities discovered in workspace dependencies.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dryRun: {
+          type: "boolean",
+          description: "Simulate fixes without modifying manifest files on disk.",
+        },
+        minSeverity: {
+          type: "string",
+          enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          description: "Minimum severity threshold to auto-remediate.",
+        },
+        workspaceDir: {
+          type: "string",
+          description: "Optional workspace directory path. Defaults to CWD.",
+        },
+      },
+    },
+  },
+  {
+    name: "poly_update_dependency",
+    description:
+      "Upgrade package dependencies across ecosystems to their latest semver-compatible versions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        package: {
+          type: "string",
+          description:
+            "Optional specific package to update (e.g. 'npm:zod' or 'requests'). If omitted, updates all.",
+        },
+        all: {
+          type: "boolean",
+          description: "Whether to update dependencies across all detected workspace members.",
+        },
+        workspaceDir: {
+          type: "string",
+          description: "Optional workspace directory path. Defaults to CWD.",
+        },
+      },
+    },
+  },
 ];

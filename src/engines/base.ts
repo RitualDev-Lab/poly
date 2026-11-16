@@ -35,6 +35,11 @@ export abstract class BaseEngine {
   abstract resolveInstallArgs(): { command: string; args: string[] };
 
   /**
+   * Resolves the CLI command and arguments to update dependencies.
+   */
+  abstract resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] };
+
+  /**
    * Executes a native command asynchronously with performance timing.
    */
   async execute(

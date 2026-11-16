@@ -143,6 +143,94 @@ export class PolyDispatcher {
   }
 
   /**
+   * Updates dependencies to their latest compatible versions
+   */
+  async update(
+    packageInput?: string,
+    options?: { all?: boolean; cwd?: string; silent?: boolean },
+  ): Promise<ExecutionResult[]> {
+    const cwd = options?.cwd ?? process.cwd();
+
+    if (packageInput) {
+      const pkg = parsePackageSpec(packageInput);
+      if (!pkg.ecosystem) {
+        pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd);
+      }
+
+      const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
+      const { command, args } = engine.resolveUpdateArgs(pkg);
+      const routedArgs = this.registryRouter.injectCliFlags(pkg.ecosystem, args, cwd);
+      const routedEnv = this.registryRouter.injectEnvironmentVariables(pkg.ecosystem, cwd);
+
+      if (!options?.silent) {
+        logExecutionPlan("update", pkg, engine.name, command, routedArgs);
+      }
+
+      const result = await engine.execute(command, routedArgs, cwd, {
+        silent: options?.silent,
+        env: routedEnv,
+      });
+
+      if (result.exitCode === 0 && !options?.silent) {
+        logSuccess(`Updated ${pkg.name} (${pkg.ecosystem}) via ${engine.name}`, result.durationMs);
+      }
+
+      return [result];
+    }
+
+    // Update all dependencies
+    if (options?.all) {
+      const allContexts = detectContexts(cwd);
+      if (allContexts.length === 0) {
+        throw new Error(`No project manifests found in '${cwd}' or parent directories.`);
+      }
+
+      const results: ExecutionResult[] = [];
+      for (const ctx of allContexts) {
+        const engine = this.getEngineForEcosystem(ctx.ecosystem, ctx.directory);
+        const { command, args } = engine.resolveUpdateArgs();
+        const routedArgs = this.registryRouter.injectCliFlags(ctx.ecosystem, args, ctx.directory);
+        const routedEnv = this.registryRouter.injectEnvironmentVariables(
+          ctx.ecosystem,
+          ctx.directory,
+        );
+        const res = await engine.execute(command, routedArgs, ctx.directory, {
+          silent: options?.silent,
+          env: routedEnv,
+        });
+        results.push(res);
+      }
+      return results;
+    }
+
+    const { primary, conflicts } = resolvePrimaryContext(cwd);
+    let targetEcosystem: Ecosystem;
+
+    if (primary) {
+      targetEcosystem = primary.ecosystem;
+    } else if (conflicts.length > 0) {
+      targetEcosystem = await promptDisambiguation("dependencies", conflicts);
+    } else {
+      throw new Error(`No project manifests found in '${cwd}' or parent directories.`);
+    }
+
+    const engine = this.getEngineForEcosystem(targetEcosystem, cwd);
+    const { command, args } = engine.resolveUpdateArgs();
+    const routedArgs = this.registryRouter.injectCliFlags(targetEcosystem, args, cwd);
+    const routedEnv = this.registryRouter.injectEnvironmentVariables(targetEcosystem, cwd);
+    const result = await engine.execute(command, routedArgs, cwd, {
+      silent: options?.silent,
+      env: routedEnv,
+    });
+
+    if (result.exitCode === 0 && !options?.silent) {
+      logSuccess(`Updated ${targetEcosystem} dependencies via ${engine.name}`, result.durationMs);
+    }
+
+    return [result];
+  }
+
+  /**
    * Inspects which CLI tool powers an ecosystem
    */
   which(ecosystem: Ecosystem, cwd?: string): { engine: string; effectiveCli: string } {

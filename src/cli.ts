@@ -12,6 +12,7 @@ import {
   generateSarifReport,
 } from "./compliance/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
+import { DockerGenerator } from "./docker/index.js";
 import { PolyDoctor } from "./doctor/index.js";
 import { PolyMcpServer, generateMcpConfig, setupIdeIntegration } from "./mcp/index.js";
 import { RegistryVerifier } from "./registry/index.js";
@@ -25,7 +26,7 @@ import {
   writeCompositeLockfile,
 } from "./workspace/index.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 const HELP_TEXT = `
 ⚡ poly — The Universal Polyglot CLI Package & Dependency Orchestrator
@@ -48,6 +49,7 @@ COMMANDS:
   cache <cmd> [key]   Manage distributed CI dependency cache (save, restore, clean)
   registry test       Verify reachability and latency of enterprise registry mirrors
   doctor              Diagnose system health, toolchains, compilers, and network connectivity
+  docker              Generate multi-stage production Dockerfile, compose, and devcontainer
   mcp                 Start stdio Model Context Protocol (MCP) server for AI coding agents
   init [--ide]        Initialize workspace or generate IDE AI agent integrations (Cursor, Claude)
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
@@ -534,6 +536,44 @@ async function main(): Promise<void> {
           } else {
             logError("Critical environment issues detected. Please follow the remediations above.");
             process.exit(1);
+          }
+        }
+        break;
+      }
+
+      case "docker": {
+        const isDevcontainer = args.includes("--devcontainer");
+        const isDryRun = args.includes("--dry-run");
+        const outDir = getFlagVal("--output-dir", "--out") || cwd;
+
+        logHeader("Generating polyglot multi-stage Docker & container configuration...");
+        const generator = new DockerGenerator();
+        const artifacts = generator.generate({
+          workspaceDir: cwd,
+          outputDir: outDir,
+          devcontainer: isDevcontainer,
+          dryRun: isDryRun,
+        });
+
+        if (isJson) {
+          console.log(JSON.stringify(artifacts, null, 2));
+        } else {
+          if (isDryRun) {
+            console.log("\x1b[33m--- Dockerfile (Dry-Run Preview) ---\x1b[0m\n");
+            console.log(artifacts.dockerfile);
+            console.log("\x1b[33m--- docker-compose.yml (Dry-Run Preview) ---\x1b[0m\n");
+            console.log(artifacts.dockerCompose);
+            if (artifacts.devcontainerJson) {
+              console.log(
+                "\x1b[33m--- .devcontainer/devcontainer.json (Dry-Run Preview) ---\x1b[0m\n",
+              );
+              console.log(artifacts.devcontainerJson);
+            }
+          } else {
+            for (const f of artifacts.createdFiles) {
+              console.log(`  \x1b[32m✔\x1b[0m Created \x1b[1m${path.relative(cwd, f)}\x1b[0m`);
+            }
+            logSuccess("Multi-stage container files generated successfully.");
           }
         }
         break;

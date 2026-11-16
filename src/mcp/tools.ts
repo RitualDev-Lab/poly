@@ -187,4 +187,26 @@ export const POLY_MCP_TOOLS: McpTool[] = [
       },
     },
   },
+  {
+    name: "poly_generate_docker",
+    description:
+      "Generate optimized multi-stage production Dockerfile, docker-compose.yml, and devcontainer for the polyglot workspace.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        devcontainer: {
+          type: "boolean",
+          description: "Whether to also generate .devcontainer/devcontainer.json",
+        },
+        dryRun: {
+          type: "boolean",
+          description: "Simulate generation without writing files to disk.",
+        },
+        workspaceDir: {
+          type: "string",
+          description: "Optional workspace directory path. Defaults to CWD.",
+        },
+      },
+    },
+  },
 ];

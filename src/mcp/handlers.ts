@@ -6,6 +6,7 @@ import {
 } from "../compliance/index.js";
 import { detectContexts } from "../detector/index.js";
 import { PolyDispatcher } from "../dispatcher/index.js";
+import { DockerGenerator } from "../docker/index.js";
 import { PolyDoctor } from "../doctor/index.js";
 import { parsePackageSpec } from "../purl/index.js";
 import type { Ecosystem } from "../types.js";
@@ -240,6 +241,17 @@ export async function handleToolCall(
 
         return {
           content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
+        };
+      }
+
+      case "poly_generate_docker": {
+        const generator = new DockerGenerator();
+        const devcontainer = Boolean(args.devcontainer);
+        const dryRun = Boolean(args.dryRun);
+        const result = generator.generate({ workspaceDir: cwd, devcontainer, dryRun });
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 

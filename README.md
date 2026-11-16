@@ -174,6 +174,22 @@ poly doctor
 poly doctor --json
 ```
 
+### Polyglot Docker & DevContainer Generator
+
+```bash
+# Generate production multi-stage Dockerfile and docker-compose.yml
+poly docker
+
+# Generate with VS Code / GitHub Codespaces DevContainer configuration
+poly docker --devcontainer
+
+# Preview generated container artifacts without writing to disk
+poly docker --devcontainer --dry-run
+
+# Output artifacts to custom target directory
+poly docker --output-dir ./deploy/docker
+```
+
 ### Distributed CI Caching & Enterprise Registries
 
 ```bash
@@ -226,6 +242,11 @@ poly which cargo   # e.g., cargo (v1.84.0)
 - [x] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
 - [x] **Phase 4: Remote CI Distributed Cache & Air-Gapped Registries** (`poly cache`, `poly registry`)
 - [x] **Phase 5: Model Context Protocol (MCP) Server & AI Agent Mesh** (`poly mcp`, `poly init --ide`)
+- [x] **Phase 6: Enterprise Ecosystem Extensions**
+  - [x] Automated Security Auto-Healer (`poly fix`) & Multi-Engine Updater (`poly update`)
+  - [x] System Health & Toolchain Diagnostic Suite (`poly doctor`)
+  - [x] Polyglot Multi-Stage Container & DevContainer Generator (`poly docker`)
+  - [x] Official GitHub Action (`RitualDev-Lab/setup-poly@v1`)
 
 ---
 

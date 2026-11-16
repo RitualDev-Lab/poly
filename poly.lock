@@ -5,16 +5,16 @@
 [meta]
 schema_version = 1
 hash_algorithm = "sha256"
-generated_at = "2026-11-16T04:25:49.347Z"
+generated_at = "2026-11-16T04:35:18.246Z"
 generated_by = "poly v0.1.0"
 
 [[member]]
 path = "."
 ecosystem = "npm"
 manifest = "package.json"
-manifest_hash = "sha256:e038e9f4d7d54cc832409f1a703509c08fe4fd28e25d6bdb74d570ccc7119686"
+manifest_hash = "sha256:45c450c2a6d5d5d88eafc949301d08dc6e78ad8fbc056d54345ae86e5a8140ac"
 lockfile = "package-lock.json"
-lockfile_hash = "sha256:ff8cb19a5b3446f8d8646f98da69128a1bb6ddac4f91f32a1d43cd92ef7436b4"
+lockfile_hash = "sha256:3b4867af2ede540039cde2f7ae4880816672b8a727d9216ac5c211726176c7cc"
 dependencies = [
   "npm:@biomejs/biome@^1.9.4",
   "npm:@types/node@^22.13.10",

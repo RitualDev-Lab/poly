@@ -13,4 +13,5 @@ export * from "./cache/index.js";
 export * from "./registry/index.js";
 export * from "./mcp/index.js";
 export * from "./doctor/index.js";
+export * from "./docker/index.js";
 export * from "./ui/index.js";

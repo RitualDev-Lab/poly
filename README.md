@@ -9,8 +9,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Official Web Platform & Interactive Simulator**: [https://ritualdev.in/poly](https://ritualdev.in/poly)  
-**Enterprise Web Repository**: [RitualDev-Lab/poly-web](https://github.com/RitualDev-Lab/poly-web)  
-**Official GitHub Action**: [RitualDev-Lab/setup-poly](https://github.com/RitualDev-Lab/setup-poly)
+**Official VS Code Extension**: [RitualDev-Lab/vscode-poly](https://github.com/RitualDev-Lab/vscode-poly)  
+**Official GitHub Action**: [RitualDev-Lab/setup-poly](https://github.com/RitualDev-Lab/setup-poly)  
+**Enterprise Web Repository**: [RitualDev-Lab/poly-web](https://github.com/RitualDev-Lab/poly-web)
 
 ---
 

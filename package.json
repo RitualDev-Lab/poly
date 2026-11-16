@@ -1,6 +1,6 @@
 {
   "name": "@ritualdev-lab/poly",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Universal Polyglot CLI Package & Dependency Orchestrator for Node.js, Python, Rust, and Go",
   "type": "module",
   "main": "dist/index.js",

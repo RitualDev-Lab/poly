@@ -72,6 +72,7 @@ test("MCP Protocol - Server Lifecycle & Methods", async (t) => {
     assert.ok(toolNames.includes("poly_verify_lock"));
     assert.ok(toolNames.includes("poly_fix_vulnerabilities"));
     assert.ok(toolNames.includes("poly_update_dependency"));
+    assert.ok(toolNames.includes("poly_doctor"));
   });
 
   await t.test("returns -32601 error for unknown methods", async () => {

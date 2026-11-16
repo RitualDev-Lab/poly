@@ -164,6 +164,16 @@ poly sbom --format cyclonedx --output sbom.json
 poly sbom --format spdx --output spdx.json
 ```
 
+### System Health & Toolchain Diagnostics
+
+```bash
+# Run complete diagnostic suite (Node, Python, Rust, Go, C compiler, registries, drift)
+poly doctor
+
+# Machine-readable diagnostic report for CI or agent pipelines
+poly doctor --json
+```
+
 ### Distributed CI Caching & Enterprise Registries
 
 ```bash

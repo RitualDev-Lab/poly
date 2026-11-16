@@ -12,6 +12,7 @@ import {
   generateSarifReport,
 } from "./compliance/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
+import { PolyDoctor } from "./doctor/index.js";
 import { PolyMcpServer, generateMcpConfig, setupIdeIntegration } from "./mcp/index.js";
 import { RegistryVerifier } from "./registry/index.js";
 import type { Ecosystem } from "./types.js";
@@ -24,7 +25,7 @@ import {
   writeCompositeLockfile,
 } from "./workspace/index.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const HELP_TEXT = `
 ⚡ poly — The Universal Polyglot CLI Package & Dependency Orchestrator
@@ -46,6 +47,7 @@ COMMANDS:
   sbom                Generate compliant CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials
   cache <cmd> [key]   Manage distributed CI dependency cache (save, restore, clean)
   registry test       Verify reachability and latency of enterprise registry mirrors
+  doctor              Diagnose system health, toolchains, compilers, and network connectivity
   mcp                 Start stdio Model Context Protocol (MCP) server for AI coding agents
   init [--ide]        Initialize workspace or generate IDE AI agent integrations (Cursor, Claude)
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
@@ -475,6 +477,64 @@ async function main(): Promise<void> {
           console.log(`Ecosystem: \x1b[36m${ecosystem}\x1b[0m`);
           console.log(`Engine:    \x1b[33m${info.engine}\x1b[0m`);
           console.log(`CLI tool:  \x1b[32m${info.effectiveCli}\x1b[0m`);
+        }
+        break;
+      }
+
+      case "doctor": {
+        logHeader("Diagnosing system health, toolchains, and workspace integrity...");
+        const doctor = new PolyDoctor();
+        const report = await doctor.diagnose(cwd);
+
+        if (isJson) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          // Group by category
+          const categories = [
+            "Toolchain",
+            "BuildEnvironment",
+            "NetworkRegistry",
+            "WorkspaceIntegrity",
+          ] as const;
+
+          for (const cat of categories) {
+            const catChecks = report.checks.filter((c) => c.category === cat);
+            if (catChecks.length === 0) continue;
+
+            console.log(`\n\x1b[1m[${cat}]\x1b[0m`);
+            for (const c of catChecks) {
+              const icon =
+                c.status === "OK"
+                  ? "\x1b[32m✔\x1b[0m"
+                  : c.status === "WARN"
+                    ? "\x1b[33m▲\x1b[0m"
+                    : "\x1b[31m✖\x1b[0m";
+
+              console.log(`  ${icon} \x1b[1m${c.name}\x1b[0m: ${c.message}`);
+              if (c.remediation) {
+                console.log(`    ↳ \x1b[36mRemediation:\x1b[0m ${c.remediation}`);
+              }
+            }
+          }
+
+          console.log("\n──────────────────────────────────────────────────");
+          console.log(
+            `Diagnostic Summary (${report.durationMs}ms): ` +
+              `\x1b[32m${report.passedCount} passed\x1b[0m, ` +
+              `\x1b[33m${report.warnCount} warnings\x1b[0m, ` +
+              `\x1b[31m${report.failCount} failed\x1b[0m`,
+          );
+
+          if (report.overallStatus === "OK") {
+            logSuccess("All systems optimal. Your environment is fully configured for poly.");
+          } else if (report.overallStatus === "WARN") {
+            console.log(
+              "\x1b[33m▲ System functional with recommendations. See remediations above.\x1b[0m",
+            );
+          } else {
+            logError("Critical environment issues detected. Please follow the remediations above.");
+            process.exit(1);
+          }
         }
         break;
       }

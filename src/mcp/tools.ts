@@ -173,4 +173,18 @@ export const POLY_MCP_TOOLS: McpTool[] = [
       },
     },
   },
+  {
+    name: "poly_doctor",
+    description:
+      "Run complete diagnostic inspection of toolchains (Node, Python, Rust, Go), build compilers, registries, and workspace integrity.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceDir: {
+          type: "string",
+          description: "Optional workspace directory path. Defaults to CWD.",
+        },
+      },
+    },
+  },
 ];

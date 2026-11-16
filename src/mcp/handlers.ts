@@ -6,6 +6,7 @@ import {
 } from "../compliance/index.js";
 import { detectContexts } from "../detector/index.js";
 import { PolyDispatcher } from "../dispatcher/index.js";
+import { PolyDoctor } from "../doctor/index.js";
 import { parsePackageSpec } from "../purl/index.js";
 import type { Ecosystem } from "../types.js";
 import {
@@ -230,6 +231,15 @@ export async function handleToolCall(
               ),
             },
           ],
+        };
+      }
+
+      case "poly_doctor": {
+        const doctor = new PolyDoctor();
+        const report = await doctor.diagnose(cwd);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
         };
       }
 

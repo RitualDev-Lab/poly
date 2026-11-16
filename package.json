@@ -1,0 +1,60 @@
+{
+  "name": "@ritualdev-lab/poly",
+  "version": "0.1.0",
+  "description": "The Universal Polyglot CLI Package & Dependency Orchestrator for Node.js, Python, Rust, and Go",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "poly": "dist/cli.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepack": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "check": "biome check ."
+  },
+  "keywords": [
+    "polyglot",
+    "package-manager",
+    "orchestrator",
+    "cli",
+    "npm",
+    "pypi",
+    "cargo",
+    "go",
+    "purl",
+    "uv",
+    "pnpm",
+    "ai-agents",
+    "developer-tools"
+  ],
+  "author": "RitualDev Lab <developer@ritualdev.in>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RitualDev-Lab/poly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RitualDev-Lab/poly/issues"
+  },
+  "homepage": "https://ritualdev.in/poly",
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

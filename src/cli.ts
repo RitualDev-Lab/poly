@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
+import {
+  CrossStackAuditor,
+  LicenseAuditor,
+  SbomGenerator,
+  type VulnerabilitySeverity,
+  generateSarifReport,
+} from "./compliance/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
@@ -26,12 +34,18 @@ COMMANDS:
   install, sync, i    Install & sync dependencies across workspace members
   run <task>          Run cross-stack orchestrated tasks (e.g. 'poly run dev', 'poly run test')
   lock                Manage or verify composite 'poly.lock'
+  audit               Scan dependencies across all ecosystems for known security vulnerabilities (OSV)
+  license             Audit license compliance and detect copyleft contamination risks (GPL/AGPL)
+  sbom                Generate compliant CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
 
 OPTIONS:
   -D, --dev           Install as a development dependency
   --frozen            Enforce zero-drift in CI (fails if poly.lock is out of sync)
   --verify, --check   Verify poly.lock against disk state without installing
+  --fail-on <level>   Threshold to fail audit (critical, high, medium, low)
+  --format <fmt>      Output format (table, json, sarif, cyclonedx, spdx)
+  --output, -o <file> Save report or SBOM artifact to disk
   --filter <pattern>  Filter workspace members by directory path pattern
   --all               Operate across all detected ecosystems in parallel
   --silent, -s        Suppress detailed subprocess stdout logs
@@ -44,8 +58,10 @@ EXAMPLES:
   poly add cargo:tokio
   poly install --frozen      # CI/CD mode: fails on untracked dependency drift
   poly sync                  # Synchronizes all polyglot monorepo members
-  poly run dev               # Runs parallel dev servers across web, api, and rust
-  poly lock --verify         # Verifies poly.lock cryptographic integrity
+  poly audit --fail-on high  # Fails build if HIGH or CRITICAL CVEs exist
+  poly audit --format sarif -o security.sarif # Exports standard SARIF for GitHub
+  poly license --check       # Flags forbidden AGPL/GPL copyleft licenses
+  poly sbom --format cyclonedx -o sbom.json   # Exports CycloneDX 1.5 SBOM
 `;
 
 async function main(): Promise<void> {
@@ -69,16 +85,33 @@ async function main(): Promise<void> {
   const isVerify = args.includes("--verify") || args.includes("--check");
   const isSilent = args.includes("-s") || args.includes("--silent");
 
-  // Extract filter flag
-  let filterPattern: string | undefined;
-  const filterIdx = args.indexOf("--filter");
-  if (filterIdx !== -1 && args[filterIdx + 1]) {
-    filterPattern = args[filterIdx + 1];
-  }
+  // Extract flag values
+  const getFlagVal = (flag: string, short?: string): string | undefined => {
+    const idx = args.indexOf(flag);
+    if (idx !== -1 && args[idx + 1]) return args[idx + 1];
+    if (short) {
+      const sIdx = args.indexOf(short);
+      if (sIdx !== -1 && args[sIdx + 1]) return args[sIdx + 1];
+    }
+    return undefined;
+  };
+
+  const filterPattern = getFlagVal("--filter");
+  const failOnRaw = getFlagVal("--fail-on")?.toUpperCase() as VulnerabilitySeverity | undefined;
+  const formatRaw = getFlagVal("--format")?.toLowerCase();
+  const outputFile = getFlagVal("--output", "-o");
 
   const positionalArgs = args
-    .slice(1)
-    .filter((arg, idx, arr) => !arg.startsWith("-") && arr[idx - 1] !== "--filter");
+    .filter(
+      (arg, idx, arr) =>
+        !arg.startsWith("-") &&
+        arr[idx - 1] !== "--filter" &&
+        arr[idx - 1] !== "--fail-on" &&
+        arr[idx - 1] !== "--format" &&
+        arr[idx - 1] !== "--output" &&
+        arr[idx - 1] !== "-o",
+    )
+    .slice(1);
 
   try {
     switch (command) {
@@ -92,7 +125,6 @@ async function main(): Promise<void> {
         for (const pkg of positionalArgs) {
           await dispatcher.add(pkg, { isDev, silent: isSilent, cwd });
         }
-        // Refresh lockfile if poly.lock exists
         writeCompositeLockfile(cwd);
         break;
       }
@@ -178,6 +210,119 @@ async function main(): Promise<void> {
         } else {
           writeCompositeLockfile(cwd);
           logSuccess("Generated / updated composite poly.lock");
+        }
+        break;
+      }
+
+      case "audit": {
+        logHeader("Executing cross-stack vulnerability audit (OSV)...");
+        const auditor = new CrossStackAuditor();
+        const report = await auditor.audit(cwd, { failOn: failOnRaw });
+
+        if (formatRaw === "sarif") {
+          const sarifJson = generateSarifReport(report);
+          if (outputFile) {
+            fs.writeFileSync(outputFile, sarifJson, "utf-8");
+            logSuccess(`Exported SARIF report to '${outputFile}'`);
+          } else {
+            console.log(sarifJson);
+          }
+        } else if (formatRaw === "json") {
+          const jsonStr = JSON.stringify(report, null, 2);
+          if (outputFile) {
+            fs.writeFileSync(outputFile, jsonStr, "utf-8");
+            logSuccess(`Exported JSON report to '${outputFile}'`);
+          } else {
+            console.log(jsonStr);
+          }
+        } else {
+          // Table / CLI terminal format
+          console.log(
+            `Scanned ${report.scannedPackages} packages across ecosystems (${report.durationMs}ms).`,
+          );
+          if (report.findings.length === 0) {
+            logSuccess("0 known vulnerabilities detected. All dependencies clean.");
+          } else {
+            console.log(`\n\x1b[31mFound ${report.findings.length} vulnerabilities:\x1b[0m`);
+            for (const f of report.findings) {
+              const sevColor =
+                f.severity === "CRITICAL" || f.severity === "HIGH" ? "\x1b[31m" : "\x1b[33m";
+              console.log(
+                `  ${sevColor}[${f.severity}]\x1b[0m \x1b[1m${f.packageName}@${f.installedVersion}\x1b[0m (${f.ecosystem}): ${f.summary}`,
+              );
+              if (f.fixedVersion) {
+                console.log(`    ↳ Fixed in: \x1b[32m${f.fixedVersion}\x1b[0m`);
+              }
+            }
+          }
+        }
+
+        if (report.hasFailure) {
+          logError(`Audit failed: Vulnerabilities matching threshold '${failOnRaw}' detected.`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "license": {
+        logHeader("Auditing workspace license compliance...");
+        const auditor = new LicenseAuditor();
+        const report = auditor.scan(cwd);
+
+        if (formatRaw === "json") {
+          const jsonStr = JSON.stringify(report, null, 2);
+          if (outputFile) {
+            fs.writeFileSync(outputFile, jsonStr, "utf-8");
+            logSuccess(`Exported license report to '${outputFile}'`);
+          } else {
+            console.log(jsonStr);
+          }
+        } else {
+          console.log(`Scanned ${report.totalPackages} packages.`);
+          console.log(
+            `  Permissive:   \x1b[32m${report.packages.filter((p) => p.category === "Permissive").length}\x1b[0m`,
+          );
+          console.log(
+            `  Copyleft:     \x1b[31m${report.packages.filter((p) => p.category === "Copyleft").length}\x1b[0m`,
+          );
+          console.log(
+            `  WeakCopyleft: \x1b[33m${report.packages.filter((p) => p.category === "WeakCopyleft").length}\x1b[0m`,
+          );
+
+          if (report.deniedPackages.length > 0) {
+            console.log(
+              `\n\x1b[31mForbidden Copyleft Licenses Detected (${report.deniedCount}):\x1b[0m`,
+            );
+            for (const p of report.deniedPackages) {
+              console.log(
+                `  \x1b[31m✖\x1b[0m ${p.packageName}@${p.version} (${p.ecosystem}) - \x1b[1m${p.license}\x1b[0m`,
+              );
+            }
+          } else {
+            logSuccess("Zero forbidden copyleft licenses detected.");
+          }
+        }
+
+        if (isVerify && !report.isCompliant) {
+          logError("License check failed: Forbidden copyleft licenses detected in dependencies.");
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "sbom": {
+        const sbomFormat = (formatRaw === "spdx" ? "spdx" : "cyclonedx") as "cyclonedx" | "spdx";
+        logHeader(`Generating ${sbomFormat.toUpperCase()} Software Bill of Materials (SBOM)...`);
+        const generator = new SbomGenerator();
+        const output = generator.generate(cwd, {
+          format: sbomFormat,
+          output: outputFile,
+        });
+
+        if (outputFile) {
+          logSuccess(`Exported ${sbomFormat.toUpperCase()} SBOM to '${outputFile}'`);
+        } else {
+          console.log(output);
         }
         break;
       }

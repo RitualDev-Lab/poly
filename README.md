@@ -114,6 +114,26 @@ poly run dev
 poly run test --filter apps/web
 ```
 
+### Enterprise Compliance & Security Auditing
+
+```bash
+# Query OSV database for known vulnerabilities across all ecosystems
+poly audit
+
+# Enforce security gates in CI/CD (fails build if HIGH or CRITICAL CVEs exist)
+poly audit --fail-on high
+
+# Export standard SARIF v2.1.0 report for GitHub Advanced Security
+poly audit --format sarif --output poly-security.sarif
+
+# Audit license compliance & flag forbidden copyleft licenses (GPL/AGPL)
+poly license --check
+
+# Generate CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials (SBOM)
+poly sbom --format cyclonedx --output sbom.json
+poly sbom --format spdx --output spdx.json
+```
+
 ### Inspecting Active Engines
 
 ```bash
@@ -128,7 +148,7 @@ poly which cargo   # e.g., cargo (v1.84.0)
 
 - [x] **Phase 1: Core Engine, PURL Routing & Native Delegation**
 - [x] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (Cryptographic SHA-256 Hashing)
-- [ ] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
+- [x] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
 - [ ] **Phase 4: Remote S3/R2 Distributed CI Cache** (`poly cache`)
 - [ ] **Phase 5: Model Context Protocol (MCP) Server for AI Agents** (`poly mcp`)
 

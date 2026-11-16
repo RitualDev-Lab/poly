@@ -8,4 +8,5 @@ export * from "./detector/index.js";
 export * from "./engines/index.js";
 export * from "./dispatcher/index.js";
 export * from "./workspace/index.js";
+export * from "./compliance/index.js";
 export * from "./ui/index.js";

@@ -18,7 +18,7 @@
     "prepack": "tsc",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
-    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "test": "tsx --test",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check ."

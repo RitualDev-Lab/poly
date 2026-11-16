@@ -5,14 +5,14 @@
 [meta]
 schema_version = 1
 hash_algorithm = "sha256"
-generated_at = "2026-11-16T02:28:42.432Z"
+generated_at = "2026-11-16T02:32:51.762Z"
 generated_by = "poly v0.1.0"
 
 [[member]]
 path = "."
 ecosystem = "npm"
 manifest = "package.json"
-manifest_hash = "sha256:b9079c8bd4f13f612730250c01f222bbffbedf68438cd1105f3fbfcf93d44f3e"
+manifest_hash = "sha256:1c0db21139b75568f42d522d1d5eb1dd3fc4bcd77d488fbdf15f9700bb5f4c9f"
 lockfile = "package-lock.json"
 lockfile_hash = "sha256:4985bf13b66fc7bc76bd6e00bca99c8f0dd498294532b24fe80a1aa402c5fc1a"
 dependencies = [

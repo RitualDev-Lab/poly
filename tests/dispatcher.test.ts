@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { PolyDispatcher } from "../src/dispatcher/executor.js";
 
@@ -19,8 +22,15 @@ test("Dispatcher - which command returns engine metadata", () => {
 
 test("Dispatcher - Error when resolving package without manifest or prefix", async () => {
   const dispatcher = new PolyDispatcher();
-  // Using an empty non-existent directory
-  await assert.rejects(async () => {
-    await dispatcher.add("requests", { cwd: "C:\\NonExistentPath_Test_123" });
-  }, /Could not determine ecosystem for 'requests'/);
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "poly-empty-isolated-"));
+  // Create an empty .git folder to bound the upward traversal
+  fs.mkdirSync(path.join(emptyDir, ".git"));
+
+  try {
+    await assert.rejects(async () => {
+      await dispatcher.add("requests", { cwd: emptyDir });
+    }, /Could not determine ecosystem for 'requests'/);
+  } finally {
+    fs.rmSync(emptyDir, { recursive: true, force: true });
+  }
 });

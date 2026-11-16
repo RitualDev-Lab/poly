@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import { PolyCacheManager } from "./cache/index.js";
 import {
   CrossStackAuditor,
   LicenseAuditor,
@@ -9,6 +10,7 @@ import {
   generateSarifReport,
 } from "./compliance/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
+import { RegistryVerifier } from "./registry/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
 import {
@@ -37,6 +39,8 @@ COMMANDS:
   audit               Scan dependencies across all ecosystems for known security vulnerabilities (OSV)
   license             Audit license compliance and detect copyleft contamination risks (GPL/AGPL)
   sbom                Generate compliant CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials
+  cache <cmd> [key]   Manage distributed CI dependency cache (save, restore, clean)
+  registry test       Verify reachability and latency of enterprise registry mirrors
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
 
 OPTIONS:
@@ -323,6 +327,70 @@ async function main(): Promise<void> {
           logSuccess(`Exported ${sbomFormat.toUpperCase()} SBOM to '${outputFile}'`);
         } else {
           console.log(output);
+        }
+        break;
+      }
+
+      case "cache": {
+        const subCommand = positionalArgs[0]?.toLowerCase();
+        const customKey = positionalArgs[1];
+        const cacheManager = new PolyCacheManager();
+
+        if (subCommand === "save") {
+          logHeader("Saving dependency artifacts to distributed cache...");
+          const res = await cacheManager.save(cwd, { key: customKey });
+          const sizeMb = ((res.sizeBytes ?? 0) / (1024 * 1024)).toFixed(2);
+          logSuccess(
+            `Saved cache entry '${res.key}' (${sizeMb} MB) via ${res.storageBackend} backend`,
+            res.durationMs,
+          );
+        } else if (subCommand === "restore") {
+          logHeader("Restoring dependency artifacts from cache...");
+          const res = await cacheManager.restore(cwd, { key: customKey });
+          if (res.hit) {
+            const sizeMb = ((res.sizeBytes ?? 0) / (1024 * 1024)).toFixed(2);
+            logSuccess(`Restored cache entry '${res.key}' (${sizeMb} MB) in ${res.durationMs}ms`);
+          } else {
+            console.log(`Cache miss for key '${res.key}'. Fresh installation required.`);
+          }
+        } else if (subCommand === "clean") {
+          logHeader("Purging local poly dependency cache...");
+          const res = await cacheManager.clean();
+          const freedMb = (res.freedBytes / (1024 * 1024)).toFixed(2);
+          logSuccess(`Purged ${res.removedKeys} cache entries (freed ${freedMb} MB)`);
+        } else {
+          logError(
+            "Invalid cache subcommand. Use: 'poly cache save', 'poly cache restore', or 'poly cache clean'",
+          );
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "registry": {
+        const subCommand = positionalArgs[0]?.toLowerCase();
+        if (subCommand === "test" || subCommand === "check") {
+          logHeader("Verifying corporate enterprise registries...");
+          const verifier = new RegistryVerifier();
+          const results = await verifier.verifyAll(cwd);
+
+          if (results.length === 0) {
+            console.log(
+              "No custom enterprise registries configured in poly.toml or environment variables.",
+            );
+          } else {
+            for (const r of results) {
+              const statusMark = r.isReachable ? "\x1b[32m✔\x1b[0m" : "\x1b[31m✖\x1b[0m";
+              const latency = `(${r.latencyMs}ms)`;
+              console.log(`  ${statusMark} [${r.ecosystem.toUpperCase()}] ${r.url} ${latency}`);
+              if (!r.isReachable && r.error) {
+                console.log(`    ↳ \x1b[31mError: ${r.error}\x1b[0m`);
+              }
+            }
+          }
+        } else {
+          logError("Invalid registry subcommand. Use: 'poly registry test'");
+          process.exit(1);
         }
         break;
       }

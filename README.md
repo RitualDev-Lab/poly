@@ -134,6 +134,22 @@ poly sbom --format cyclonedx --output sbom.json
 poly sbom --format spdx --output spdx.json
 ```
 
+### Distributed CI Caching & Enterprise Registries
+
+```bash
+# Save dependency artifacts (node_modules, .venv, target) into local / CI cache
+poly cache save
+
+# Restore dependency artifacts using deterministic OS/Arch/poly.lock hash key
+poly cache restore
+
+# Purge local cache
+poly cache clean
+
+# Verify reachability and latency of corporate registries (Artifactory, Nexus, AWS CodeArtifact)
+poly registry test
+```
+
 ### Inspecting Active Engines
 
 ```bash
@@ -149,7 +165,7 @@ poly which cargo   # e.g., cargo (v1.84.0)
 - [x] **Phase 1: Core Engine, PURL Routing & Native Delegation**
 - [x] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (Cryptographic SHA-256 Hashing)
 - [x] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
-- [ ] **Phase 4: Remote S3/R2 Distributed CI Cache** (`poly cache`)
+- [x] **Phase 4: Remote CI Distributed Cache & Air-Gapped Registries** (`poly cache`, `poly registry`)
 - [ ] **Phase 5: Model Context Protocol (MCP) Server for AI Agents** (`poly mcp`)
 
 ---

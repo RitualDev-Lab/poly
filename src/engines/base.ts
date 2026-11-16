@@ -41,7 +41,7 @@ export abstract class BaseEngine {
     command: string,
     args: string[],
     cwd: string,
-    options?: { silent?: boolean },
+    options?: { silent?: boolean; env?: NodeJS.ProcessEnv },
   ): Promise<ExecutionResult> {
     const start = performance.now();
 
@@ -50,6 +50,7 @@ export abstract class BaseEngine {
         cwd,
         shell: process.platform === "win32",
         stdio: options?.silent ? "pipe" : "inherit",
+        env: options?.env ? { ...process.env, ...options.env } : process.env,
       });
 
       let stdout = "";

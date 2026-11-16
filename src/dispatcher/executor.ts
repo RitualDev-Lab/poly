@@ -7,11 +7,14 @@ import {
   RustEngine,
 } from "../engines/index.js";
 import { parsePackageSpec } from "../purl/parser.js";
+import { RegistryRouter } from "../registry/index.js";
 import type { Ecosystem, ExecutionResult, PackageSpec } from "../types.js";
 import { promptDisambiguation } from "../ui/prompt.js";
 import { logExecutionPlan, logSuccess } from "../ui/reporter.js";
 
 export class PolyDispatcher {
+  private registryRouter = new RegistryRouter();
+
   /**
    * Resolves ecosystem and adds a package using the native manager
    */
@@ -30,13 +33,18 @@ export class PolyDispatcher {
     // 2. Select native engine
     const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
     const { command, args } = engine.resolveAddArgs(pkg);
+    const routedArgs = this.registryRouter.injectCliFlags(pkg.ecosystem, args, cwd);
+    const routedEnv = this.registryRouter.injectEnvironmentVariables(pkg.ecosystem, cwd);
 
     if (!options?.silent) {
-      logExecutionPlan("add", pkg, engine.name, command, args);
+      logExecutionPlan("add", pkg, engine.name, command, routedArgs);
     }
 
     // 3. Execute native command
-    const result = await engine.execute(command, args, cwd, options);
+    const result = await engine.execute(command, routedArgs, cwd, {
+      silent: options?.silent,
+      env: routedEnv,
+    });
     if (result.exitCode === 0 && !options?.silent) {
       logSuccess(`Added ${pkg.name} (${pkg.ecosystem}) via ${engine.name}`, result.durationMs);
     }
@@ -93,7 +101,15 @@ export class PolyDispatcher {
       for (const ctx of allContexts) {
         const engine = this.getEngineForEcosystem(ctx.ecosystem, ctx.directory);
         const { command, args } = engine.resolveInstallArgs();
-        const res = await engine.execute(command, args, ctx.directory, options);
+        const routedArgs = this.registryRouter.injectCliFlags(ctx.ecosystem, args, ctx.directory);
+        const routedEnv = this.registryRouter.injectEnvironmentVariables(
+          ctx.ecosystem,
+          ctx.directory,
+        );
+        const res = await engine.execute(command, routedArgs, ctx.directory, {
+          silent: options?.silent,
+          env: routedEnv,
+        });
         results.push(res);
       }
       return results;
@@ -112,7 +128,12 @@ export class PolyDispatcher {
 
     const engine = this.getEngineForEcosystem(targetEcosystem, cwd);
     const { command, args } = engine.resolveInstallArgs();
-    const result = await engine.execute(command, args, cwd, options);
+    const routedArgs = this.registryRouter.injectCliFlags(targetEcosystem, args, cwd);
+    const routedEnv = this.registryRouter.injectEnvironmentVariables(targetEcosystem, cwd);
+    const result = await engine.execute(command, routedArgs, cwd, {
+      silent: options?.silent,
+      env: routedEnv,
+    });
 
     if (result.exitCode === 0 && !options?.silent) {
       logSuccess(`Installed ${targetEcosystem} dependencies via ${engine.name}`, result.durationMs);

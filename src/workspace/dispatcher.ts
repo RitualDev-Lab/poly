@@ -1,9 +1,11 @@
 import { GoEngine, NodeEngine, PythonEngine, RustEngine } from "../engines/index.js";
+import { RegistryRouter } from "../registry/index.js";
 import type { Ecosystem, ExecutionResult } from "../types.js";
 import { loadWorkspaceConfig, resolveWorkspaceMembers } from "./config.js";
 import { verifyCompositeLockfile, writeCompositeLockfile } from "./lockfile.js";
 
 export class WorkspaceDispatcher {
+  private registryRouter = new RegistryRouter();
   /**
    * Synchronizes all workspace members concurrently with optional frozen enforcement.
    */
@@ -45,9 +47,19 @@ export class WorkspaceDispatcher {
         const workerPromise = (async () => {
           const engine = this.getEngine(member.context.ecosystem, member.context.lockfile);
           const { command, args } = engine.resolveInstallArgs();
+          const routedArgs = this.registryRouter.injectCliFlags(
+            member.context.ecosystem,
+            args,
+            member.absoluteDir,
+          );
+          const routedEnv = this.registryRouter.injectEnvironmentVariables(
+            member.context.ecosystem,
+            member.absoluteDir,
+          );
 
-          const res = await engine.execute(command, args, member.absoluteDir, {
+          const res = await engine.execute(command, routedArgs, member.absoluteDir, {
             silent: options?.silent,
+            env: routedEnv,
           });
           results.push(res);
         })();

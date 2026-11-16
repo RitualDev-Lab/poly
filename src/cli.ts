@@ -4,8 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { PolyCacheManager } from "./cache/index.js";
 import {
+  AttestationEngine,
   CrossStackAuditor,
   LicenseAuditor,
+  PolicyEvaluator,
   SbomGenerator,
   SecurityAutoHealer,
   type VulnerabilitySeverity,
@@ -26,7 +28,7 @@ import {
   writeCompositeLockfile,
 } from "./workspace/index.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 const HELP_TEXT = `
 ⚡ poly — The Universal Polyglot CLI Package & Dependency Orchestrator
@@ -50,6 +52,8 @@ COMMANDS:
   registry test       Verify reachability and latency of enterprise registry mirrors
   doctor              Diagnose system health, toolchains, compilers, and network connectivity
   docker              Generate multi-stage production Dockerfile, compose, and devcontainer
+  attest <cmd>        Generate, sign, or verify SLSA v1.0 in-toto supply chain attestations
+  policy              Evaluate corporate compliance policy (license whitelist & CVE thresholds)
   mcp                 Start stdio Model Context Protocol (MCP) server for AI coding agents
   init [--ide]        Initialize workspace or generate IDE AI agent integrations (Cursor, Claude)
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
@@ -574,6 +578,189 @@ async function main(): Promise<void> {
               console.log(`  \x1b[32m✔\x1b[0m Created \x1b[1m${path.relative(cwd, f)}\x1b[0m`);
             }
             logSuccess("Multi-stage container files generated successfully.");
+          }
+        }
+        break;
+      }
+
+      case "attest": {
+        const subCmd = args[1] || "generate";
+        const engine = new AttestationEngine();
+        const outFile = getFlagVal("--output", "-o");
+
+        if (subCmd === "keygen") {
+          logHeader("Generating Ed25519 Cryptographic Signing Keypair...");
+          const keyDir = getFlagVal("--output-dir", "--out") || cwd;
+          const { privateKey, publicKey } = engine.generateKeyPair();
+          const privPath = path.join(keyDir, "poly-key.pem");
+          const pubPath = path.join(keyDir, "poly-key.pub");
+
+          fs.writeFileSync(privPath, privateKey, { mode: 0o600 });
+          fs.writeFileSync(pubPath, publicKey, "utf-8");
+
+          if (isJson) {
+            console.log(JSON.stringify({ privateKey: privPath, publicKey: pubPath }, null, 2));
+          } else {
+            console.log(
+              `  \x1b[32m✔\x1b[0m Generated Private Key: \x1b[1m${path.relative(cwd, privPath)}\x1b[0m`,
+            );
+            console.log(
+              `  \x1b[32m✔\x1b[0m Generated Public Key:  \x1b[1m${path.relative(cwd, pubPath)}\x1b[0m`,
+            );
+            logSuccess("Ed25519 signing keypair generated successfully.");
+          }
+          break;
+        }
+
+        if (subCmd === "generate") {
+          logHeader("Generating in-toto SLSA Provenance v1.0 Attestation...");
+          const statement = engine.generateStatement({
+            workspaceDir: cwd,
+            builderVersion: VERSION,
+          });
+
+          if (outFile) {
+            fs.writeFileSync(outFile, JSON.stringify(statement, null, 2), "utf-8");
+            logSuccess(`Attestation statement written to ${outFile}`);
+          } else {
+            console.log(JSON.stringify(statement, null, 2));
+          }
+          break;
+        }
+
+        if (subCmd === "sign") {
+          const keyPath = getFlagVal("--key");
+          if (!keyPath) {
+            logError("Missing required '--key <private-key.pem>' parameter.");
+            process.exit(1);
+          }
+
+          if (!fs.existsSync(keyPath)) {
+            logError(`Private key file not found: ${keyPath}`);
+            process.exit(1);
+          }
+
+          logHeader("Signing in-toto Provenance Statement with Private Key...");
+          const privKeyPem = fs.readFileSync(keyPath, "utf-8");
+          const statement = engine.generateStatement({
+            workspaceDir: cwd,
+            builderVersion: VERSION,
+          });
+          const keyId = getFlagVal("--key-id") || "poly-key-1";
+          const envelope = engine.signStatement(statement, privKeyPem, keyId);
+
+          if (outFile) {
+            fs.writeFileSync(outFile, JSON.stringify(envelope, null, 2), "utf-8");
+            logSuccess(`DSSE Signed Envelope written to ${outFile}`);
+          } else {
+            console.log(JSON.stringify(envelope, null, 2));
+          }
+          break;
+        }
+
+        if (subCmd === "verify") {
+          const attestFile = getFlagVal("--attestation", "--file");
+          const keyPath = getFlagVal("--key");
+
+          if (!attestFile || !keyPath) {
+            logError(
+              "Verification requires '--attestation <file.json>' and '--key <public-key.pem>'.",
+            );
+            process.exit(1);
+          }
+
+          if (!fs.existsSync(attestFile)) {
+            logError(`Attestation envelope file not found: ${attestFile}`);
+            process.exit(1);
+          }
+          if (!fs.existsSync(keyPath)) {
+            logError(`Public key file not found: ${keyPath}`);
+            process.exit(1);
+          }
+
+          logHeader("Verifying DSSE Supply Chain Attestation & Artifact Signatures...");
+          const envelope = JSON.parse(fs.readFileSync(attestFile, "utf-8"));
+          const pubKey = fs.readFileSync(keyPath, "utf-8");
+          const res = engine.verifyEnvelope(envelope, pubKey, cwd);
+
+          if (isJson) {
+            console.log(JSON.stringify(res, null, 2));
+          } else {
+            if (res.signatureVerified) {
+              console.log(
+                "  \x1b[32m✔\x1b[0m Cryptographic Signature: \x1b[32mVALID\x1b[0m (Authentic Publisher)",
+              );
+            } else {
+              console.log("  \x1b[31m✖\x1b[0m Cryptographic Signature: \x1b[31mINVALID\x1b[0m");
+            }
+
+            for (const s of res.subjectResults) {
+              if (s.matches) {
+                console.log(
+                  `  \x1b[32m✔\x1b[0m Subject '${s.name}': \x1b[32mZERO DRIFT\x1b[0m (${s.expectedHash.slice(0, 16)}...)`,
+                );
+              } else {
+                console.log(
+                  `  \x1b[31m✖\x1b[0m Subject '${s.name}': \x1b[31mTAMPERED / MISMATCH\x1b[0m`,
+                );
+              }
+            }
+
+            if (res.valid) {
+              logSuccess("SLSA Provenance Attestation & Artifact Integrity Verified.");
+            } else {
+              logError(
+                `Verification failed: ${res.error || "Artifact drift or invalid signature"}`,
+              );
+              process.exit(1);
+            }
+          }
+          break;
+        }
+
+        logError(
+          `Unknown attest command: '${subCmd}'. Valid subcommands: generate, sign, verify, keygen`,
+        );
+        process.exit(1);
+        break;
+      }
+
+      case "policy": {
+        logHeader("Evaluating Corporate Governance Policy & Security Gates...");
+        const evaluator = new PolicyEvaluator();
+        const shouldFail = args.includes("--fail-on-violation") || !args.includes("--no-fail");
+        const cveThreshold = getFlagVal("--fail-on") as VulnerabilitySeverity | undefined;
+
+        const report = await evaluator.evaluate(cwd, {
+          failOnCveSeverity: cveThreshold,
+          checkLockfileDrift: true,
+        });
+
+        if (isJson) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          console.log(`\x1b[1mPackages Scanned:\x1b[0m ${report.totalPackagesChecked}`);
+          console.log(
+            `\x1b[1mLicense Denials:\x1b[0m  ${report.deniedLicenseCount === 0 ? "\x1b[32m0\x1b[0m" : `\x1b[31m${report.deniedLicenseCount}\x1b[0m`}`,
+          );
+          console.log(
+            `\x1b[1mCVE Violations:\x1b[0m   ${report.cveViolationCount === 0 ? "\x1b[32m0\x1b[0m" : `\x1b[31m${report.cveViolationCount}\x1b[0m`}\n`,
+          );
+
+          if (report.violations.length > 0) {
+            console.log("\x1b[31m\x1b[1mPolicy Violations Detected:\x1b[0m");
+            for (const v of report.violations) {
+              console.log(`  \x1b[31m✖\x1b[0m [${v.rule}] ${v.message}`);
+            }
+          }
+
+          if (report.passed) {
+            logSuccess("All corporate governance and security policies passed.");
+          } else {
+            logError("Corporate governance policy failed with violations.");
+            if (shouldFail) {
+              process.exit(1);
+            }
           }
         }
         break;

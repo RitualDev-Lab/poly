@@ -209,4 +209,72 @@ export const POLY_MCP_TOOLS: McpTool[] = [
       },
     },
   },
+  {
+    name: "poly_generate_attestation",
+    description:
+      "Generate cryptographic in-toto SLSA Provenance v1.0 supply chain attestation for workspace artifacts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subjects: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional list of files to include as attestation subjects (e.g. ['poly.lock']).",
+        },
+        workspaceDir: {
+          type: "string",
+          description: "Optional workspace directory path. Defaults to CWD.",
+        },
+      },
+    },
+  },
+  {
+    name: "poly_verify_attestation",
+    description:
+      "Cryptographically verify a DSSE supply chain attestation envelope against a public key.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        envelopeJson: {
+          type: "string",
+          description: "Raw JSON string of the DSSE attestation envelope.",
+        },
+        publicKeyPem: {
+          type: "string",
+          description: "SPKI or PKCS8 public key in PEM format.",
+        },
+        workspaceDir: {
+          type: "string",
+          description:
+            "Optional workspace directory to verify artifact hashes against on-disk files.",
+        },
+      },
+      required: ["envelopeJson", "publicKeyPem"],
+    },
+  },
+  {
+    name: "poly_evaluate_policy",
+    description:
+      "Evaluate corporate compliance policy against licenses and security CVE thresholds.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        deniedLicenses: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of forbidden licenses (e.g. ['GPL-3.0', 'AGPL-3.0']).",
+        },
+        failOnCveSeverity: {
+          type: "string",
+          enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          description: "Fail threshold for CVE findings.",
+        },
+        workspaceDir: {
+          type: "string",
+          description: "Optional workspace directory path. Defaults to CWD.",
+        },
+      },
+    },
+  },
 ];

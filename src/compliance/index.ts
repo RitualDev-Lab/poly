@@ -5,3 +5,5 @@ export * from "./sarif.js";
 export * from "./licenses.js";
 export * from "./sbom.js";
 export * from "./fixer.js";
+export * from "./attestation.js";
+export * from "./policy.js";

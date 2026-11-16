@@ -1,6 +1,8 @@
 import path from "node:path";
 import {
+  AttestationEngine,
   CrossStackAuditor,
+  PolicyEvaluator,
   SecurityAutoHealer,
   type VulnerabilitySeverity,
 } from "../compliance/index.js";
@@ -252,6 +254,46 @@ export async function handleToolCall(
 
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "poly_generate_attestation": {
+        const engine = new AttestationEngine();
+        const subjects = Array.isArray(args.subjects) ? (args.subjects as string[]) : undefined;
+        const statement = engine.generateStatement({ workspaceDir: cwd, subjects });
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(statement, null, 2) }],
+        };
+      }
+
+      case "poly_verify_attestation": {
+        const engine = new AttestationEngine();
+        const envelope = JSON.parse(String(args.envelopeJson));
+        const pubKey = String(args.publicKeyPem);
+        const verification = engine.verifyEnvelope(envelope, pubKey, cwd);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(verification, null, 2) }],
+        };
+      }
+
+      case "poly_evaluate_policy": {
+        const evaluator = new PolicyEvaluator();
+        const denied = Array.isArray(args.deniedLicenses)
+          ? (args.deniedLicenses as string[])
+          : undefined;
+        const cveThreshold = args.failOnCveSeverity
+          ? (String(args.failOnCveSeverity) as VulnerabilitySeverity)
+          : undefined;
+        const report = await evaluator.evaluate(cwd, {
+          deniedLicenses: denied,
+          failOnCveSeverity: cveThreshold,
+          checkLockfileDrift: true,
+        });
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
         };
       }
 

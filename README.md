@@ -196,6 +196,25 @@ poly docker --devcontainer --dry-run
 poly docker --output-dir ./deploy/docker
 ```
 
+### Enterprise Cryptographic Attestation & Policy Enforcement
+
+```bash
+# Generate Ed25519 cryptographic signing keypair (PEM format)
+poly attest keygen
+
+# Generate in-toto SLSA Provenance v1.0 statement
+poly attest generate --output attestation.json
+
+# Cryptographically sign provenance statement into DSSE envelope
+poly attest sign --key poly-key.pem --output signed-envelope.json
+
+# Verify DSSE envelope signature & enforce zero artifact drift on disk
+poly attest verify --attestation signed-envelope.json --key poly-key.pub
+
+# Evaluate enterprise license whitelists and CVE thresholds
+poly policy --fail-on-violation
+```
+
 ### Distributed CI Caching & Enterprise Registries
 
 ```bash
@@ -253,6 +272,8 @@ poly which cargo   # e.g., cargo (v1.84.0)
   - [x] System Health & Toolchain Diagnostic Suite (`poly doctor`)
   - [x] Polyglot Multi-Stage Container & DevContainer Generator (`poly docker`)
   - [x] Official GitHub Action (`RitualDev-Lab/setup-poly@v1`)
+  - [x] Official VS Code Extension (`RitualDev-Lab/vscode-poly`)
+  - [x] Enterprise Cryptographic Attestation & Policy Gates (`poly attest`, `poly policy`)
 
 ---
 

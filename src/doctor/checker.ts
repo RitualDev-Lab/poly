@@ -52,38 +52,26 @@ export class PolyDoctor {
   }
 
   private checkNodeToolchain(checks: DiagnosticCheckItem[]): void {
-    const nodeRes = this.runCommandSafe("node", ["-v"]);
-    if (nodeRes.available) {
-      const ver = nodeRes.output.trim();
-      const major = Number.parseInt(ver.replace("v", "").split(".")[0], 10);
-      if (major >= 20) {
-        checks.push({
-          id: "toolchain-node",
-          name: "Node.js Runtime",
-          category: "Toolchain",
-          status: "OK",
-          version: ver,
-          message: `Node.js runtime active (${ver})`,
-        });
-      } else {
-        checks.push({
-          id: "toolchain-node",
-          name: "Node.js Runtime",
-          category: "Toolchain",
-          status: "WARN",
-          version: ver,
-          message: `Node.js ${ver} detected. Poly recommends Node >= 20.0.0 for optimal performance.`,
-          remediation: "Upgrade Node.js to >= 20.0.0",
-        });
-      }
+    const ver = process.version;
+    const major = Number.parseInt(ver.replace("v", "").split(".")[0], 10);
+    if (major >= 20) {
+      checks.push({
+        id: "toolchain-node",
+        name: "Node.js Runtime",
+        category: "Toolchain",
+        status: "OK",
+        version: ver,
+        message: `Node.js runtime active (${ver})`,
+      });
     } else {
       checks.push({
         id: "toolchain-node",
         name: "Node.js Runtime",
         category: "Toolchain",
-        status: "FAIL",
-        message: "Node.js executable not found in system PATH.",
-        remediation: "Install Node.js from https://nodejs.org",
+        status: "WARN",
+        version: ver,
+        message: `Node.js ${ver} detected. Poly recommends Node >= 20.0.0 for optimal performance.`,
+        remediation: "Upgrade Node.js to >= 20.0.0",
       });
     }
 
@@ -388,7 +376,7 @@ export class PolyDoctor {
   ): { available: boolean; output: string } {
     try {
       const output = execSync(`${command} ${args.join(" ")}`, {
-        timeout: 1000,
+        timeout: 2500,
         stdio: ["ignore", "pipe", "ignore"],
         encoding: "utf-8",
         shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",

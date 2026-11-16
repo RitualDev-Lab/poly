@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import path from "node:path";
 import { PolyCacheManager } from "./cache/index.js";
 import {
   CrossStackAuditor,
@@ -10,6 +11,7 @@ import {
   generateSarifReport,
 } from "./compliance/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
+import { PolyMcpServer, generateMcpConfig, setupIdeIntegration } from "./mcp/index.js";
 import { RegistryVerifier } from "./registry/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
@@ -41,6 +43,8 @@ COMMANDS:
   sbom                Generate compliant CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials
   cache <cmd> [key]   Manage distributed CI dependency cache (save, restore, clean)
   registry test       Verify reachability and latency of enterprise registry mirrors
+  mcp                 Start stdio Model Context Protocol (MCP) server for AI coding agents
+  init [--ide]        Initialize workspace or generate IDE AI agent integrations (Cursor, Claude)
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
 
 OPTIONS:
@@ -49,6 +53,7 @@ OPTIONS:
   --verify, --check   Verify poly.lock against disk state without installing
   --fail-on <level>   Threshold to fail audit (critical, high, medium, low)
   --format <fmt>      Output format (table, json, sarif, cyclonedx, spdx)
+  --json              Machine-readable JSON output mode across commands
   --output, -o <file> Save report or SBOM artifact to disk
   --filter <pattern>  Filter workspace members by directory path pattern
   --all               Operate across all detected ecosystems in parallel
@@ -88,6 +93,7 @@ async function main(): Promise<void> {
   const isFrozen = args.includes("--frozen");
   const isVerify = args.includes("--verify") || args.includes("--check");
   const isSilent = args.includes("-s") || args.includes("--silent");
+  const isJson = args.includes("--json");
 
   // Extract flag values
   const getFlagVal = (flag: string, short?: string): string | undefined => {
@@ -198,18 +204,23 @@ async function main(): Promise<void> {
 
       case "lock": {
         if (isVerify) {
-          logHeader("Verifying composite poly.lock cryptographic integrity...");
           const drift = verifyCompositeLockfile(cwd);
-          if (drift.isDrifted) {
-            logError("Supply-chain drift detected! poly.lock is out of sync with disk:");
-            for (const issue of drift.issues) {
-              console.error(
-                `  \x1b[31m✖\x1b[0m [${issue.memberPath}] ${issue.file}: ${issue.reason}`,
-              );
-            }
-            process.exit(1);
+          if (isJson) {
+            console.log(JSON.stringify(drift, null, 2));
+            if (drift.isDrifted) process.exit(1);
           } else {
-            logSuccess("poly.lock is 100% verified. All manifests and native lockfiles match.");
+            logHeader("Verifying composite poly.lock cryptographic integrity...");
+            if (drift.isDrifted) {
+              logError("Supply-chain drift detected! poly.lock is out of sync with disk:");
+              for (const issue of drift.issues) {
+                console.error(
+                  `  \x1b[31m✖\x1b[0m [${issue.memberPath}] ${issue.file}: ${issue.reason}`,
+                );
+              }
+              process.exit(1);
+            } else {
+              logSuccess("poly.lock is 100% verified. All manifests and native lockfiles match.");
+            }
           }
         } else {
           writeCompositeLockfile(cwd);
@@ -404,9 +415,48 @@ async function main(): Promise<void> {
 
         const dispatcher = new PolyDispatcher();
         const info = dispatcher.which(ecosystem, cwd);
-        console.log(`Ecosystem: \x1b[36m${ecosystem}\x1b[0m`);
-        console.log(`Engine:    \x1b[33m${info.engine}\x1b[0m`);
-        console.log(`CLI tool:  \x1b[32m${info.effectiveCli}\x1b[0m`);
+        if (isJson) {
+          console.log(JSON.stringify({ ecosystem, ...info }, null, 2));
+        } else {
+          console.log(`Ecosystem: \x1b[36m${ecosystem}\x1b[0m`);
+          console.log(`Engine:    \x1b[33m${info.engine}\x1b[0m`);
+          console.log(`CLI tool:  \x1b[32m${info.effectiveCli}\x1b[0m`);
+        }
+        break;
+      }
+
+      case "mcp": {
+        const isConfig = args.includes("--config");
+        if (isConfig) {
+          console.log(JSON.stringify(generateMcpConfig(), null, 2));
+        } else {
+          const server = new PolyMcpServer(cwd);
+          server.start();
+        }
+        break;
+      }
+
+      case "init": {
+        const isIde = args.includes("--ide");
+        if (isIde) {
+          const target = (positionalArgs[0]?.toLowerCase() || "all") as "cursor" | "claude" | "all";
+          logHeader(`Configuring IDE extension & AI agent integration (${target})...`);
+          const res = setupIdeIntegration(cwd, target);
+          for (const f of res.createdFiles) {
+            console.log(`  \x1b[32m✔\x1b[0m Created \x1b[1m${path.relative(cwd, f)}\x1b[0m`);
+          }
+          logSuccess("AI coding assistant configuration generated successfully.");
+        } else {
+          logHeader("Initializing poly workspace...");
+          const tomlPath = path.join(cwd, "poly.toml");
+          if (!fs.existsSync(tomlPath)) {
+            const defaultToml = `[workspace]\nmembers = ["apps/*", "services/*", "crates/*"]\n`;
+            fs.writeFileSync(tomlPath, defaultToml, "utf-8");
+            logSuccess("Created poly.toml");
+          } else {
+            console.log("poly.toml already exists.");
+          }
+        }
         break;
       }
 

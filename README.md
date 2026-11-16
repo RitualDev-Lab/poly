@@ -150,6 +150,25 @@ poly cache clean
 poly registry test
 ```
 
+### AI Coding Agent Protocol (MCP) & IDE Extensions
+
+```bash
+# Start the stdio Model Context Protocol (MCP) server for AI coding agents
+poly mcp
+
+# Output ready-to-paste MCP client configuration for Cursor or Claude Desktop
+poly mcp --config
+
+# Automatically configure IDE extensions and AI rules (.cursor/mcp.json, .cursor/rules/poly.mdc)
+poly init --ide cursor
+poly init --ide claude
+poly init --ide all
+
+# Machine-readable output mode across commands
+poly which npm --json
+poly lock --verify --json
+```
+
 ### Inspecting Active Engines
 
 ```bash
@@ -166,7 +185,7 @@ poly which cargo   # e.g., cargo (v1.84.0)
 - [x] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (Cryptographic SHA-256 Hashing)
 - [x] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
 - [x] **Phase 4: Remote CI Distributed Cache & Air-Gapped Registries** (`poly cache`, `poly registry`)
-- [ ] **Phase 5: Model Context Protocol (MCP) Server for AI Agents** (`poly mcp`)
+- [x] **Phase 5: Model Context Protocol (MCP) Server & AI Agent Mesh** (`poly mcp`, `poly init --ide`)
 
 ---
 

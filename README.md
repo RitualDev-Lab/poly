@@ -36,7 +36,10 @@ Switching cognitive context between `pnpm add`, `uv add`, `cargo add`, and `go g
 ## Key Features
 
 - **PURL Standard & Shorthand**: Use `npm:zod`, `pypi:fastapi`, `cargo:tokio`, or standard `pkg:npm/...` specifications.
-- **Proximity & Context Detection**: Run `poly add requests` and `poly` inspects your directory tree up to the repository root to automatically route to the right ecosystem.
+- **Polyglot Workspaces (`poly.toml`)**: Orchestrate monorepos with parallel dependency synchronization across members.
+- **Composite Cryptographic Lockfile (`poly.lock`)**: High-speed SHA-256 integrity verification tracking all underlying native lockfiles.
+- **Zero-Drift CI/CD Mode (`--frozen`)**: Deterministically fails if any manifest or lockfile is modified out-of-band.
+- **Cross-Stack Task Runner (`poly run <task>`)**: Concurrently run scripts across services with colorized prefix streaming.
 - **Native Engine Delegation**: Zero custom solvers or lockfile corruption. `poly` delegates 100% of the resolution to verified native tools (`uv`, `pnpm`, `cargo`, `go`).
 - **Interactive Disambiguation**: When multiple manifests exist in the same directory, `poly` presents an inline selection prompt.
 - **AI Agent Friendly**: Eliminates shell syntax hallucination for autonomous coding agents.
@@ -94,6 +97,23 @@ poly install
 poly install --all
 ```
 
+### Workspace Operations & Deterministic Lockfiles
+
+```bash
+# Synchronize all workspace members concurrently
+poly sync
+
+# Enforce zero-drift in CI/CD pipelines (fails if lockfile is out of sync)
+poly install --frozen
+
+# Verify composite lockfile cryptographic integrity without modifying disk
+poly lock --verify
+
+# Run cross-stack scripts across services with colorized prefix streaming
+poly run dev
+poly run test --filter apps/web
+```
+
 ### Inspecting Active Engines
 
 ```bash
@@ -106,8 +126,8 @@ poly which cargo   # e.g., cargo (v1.84.0)
 
 ## Roadmap
 
-- [x] **Phase 1: Core Engine, PURL Routing & Native Delegation** (Current)
-- [ ] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (BLAKE3 Cryptographic Hashing)
+- [x] **Phase 1: Core Engine, PURL Routing & Native Delegation**
+- [x] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (Cryptographic SHA-256 Hashing)
 - [ ] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
 - [ ] **Phase 4: Remote S3/R2 Distributed CI Cache** (`poly cache`)
 - [ ] **Phase 5: Model Context Protocol (MCP) Server for AI Agents** (`poly mcp`)

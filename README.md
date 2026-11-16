@@ -58,6 +58,23 @@ npm install -g @ritualdev-lab/poly
 npx @ritualdev-lab/poly add pypi:fastapi
 ```
 
+### GitHub Actions CI/CD Integration
+
+Use the official [setup-poly](https://github.com/RitualDev-Lab/setup-poly) action in your workflow:
+
+```yaml
+- name: Set up Poly
+  uses: RitualDev-Lab/setup-poly@v1
+  with:
+    version: 'latest'
+
+- name: Sync dependencies & verify zero drift
+  run: poly install --frozen
+
+- name: Cross-stack CVE security gate
+  run: poly audit --fail-on high
+```
+
 ---
 
 ## CLI Usage

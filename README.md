@@ -5,7 +5,12 @@
 
 [![CI](https://github.com/RitualDev-Lab/poly/actions/workflows/ci.yml/badge.svg)](https://github.com/RitualDev-Lab/poly/actions)
 [![npm version](https://img.shields.io/npm/v/@ritualdev-lab/poly.svg?color=blue)](https://www.npmjs.com/package/@ritualdev-lab/poly)
+[![Web Platform](https://img.shields.io/badge/Web%20Platform-ritualdev.in%2Fpoly-38bdf8.svg)](https://ritualdev.in/poly)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**Official Web Platform & Interactive Simulator**: [https://ritualdev.in/poly](https://ritualdev.in/poly)  
+**Enterprise Web Repository**: [RitualDev-Lab/poly-web](https://github.com/RitualDev-Lab/poly-web)  
+**Official GitHub Action**: [RitualDev-Lab/setup-poly](https://github.com/RitualDev-Lab/setup-poly)
 
 ---
 

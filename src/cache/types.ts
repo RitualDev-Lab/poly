@@ -19,13 +19,13 @@ export interface CacheResult {
   key: string;
   durationMs: number;
   sizeBytes?: number;
-  storageBackend: "local" | "s3" | "r2";
+  storageBackend: "local" | "s3" | "r2" | "remote";
 }
 
 export interface CacheStorageAdapter {
-  readonly backend: "local" | "s3" | "r2";
+  readonly backend: "local" | "s3" | "r2" | "remote";
   hasKey(key: string): Promise<boolean>;
-  save(key: string, sourceDirectories: string[]): Promise<CacheResult>;
+  save(key: string, sourceDirectories: string[], options?: { tag?: string }): Promise<CacheResult>;
   restore(key: string, targetBaseDir: string): Promise<CacheResult>;
-  clean(): Promise<{ removedKeys: number; freedBytes: number }>;
+  clean(options?: { branch?: string }): Promise<{ removedKeys: number; freedBytes: number }>;
 }

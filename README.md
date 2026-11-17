@@ -231,6 +231,30 @@ poly cache clean
 poly registry test
 ```
 
+### Hosted Remote Cache Integration (`poly login`, `poly cache status`, `poly cache purge`)
+
+Bridge directly into your hosted **[poly-cloud-api](https://github.com/RitualDev-Lab/poly-cloud-api)** server:
+
+```bash
+# Authenticate against your hosted Poly Cloud API server (stores in ~/.poly/config.json)
+poly login --url https://cache.ritualdev.in --token poly_tok_abc123 --workspace default
+
+# Display active authenticated session
+poly whoami
+
+# Inspect live cluster latency, hit rate (%), saved compute time, and dollar ROI
+poly cache status
+poly cache status --json
+
+# Invalidate remote cache for the current git branch with one command
+poly cache purge
+poly cache purge --branch feature/login-flow
+poly cache purge --all
+
+# Log out and remove local stored credentials
+poly logout
+```
+
 ### AI Coding Agent Protocol (MCP) & IDE Extensions
 
 ```bash
@@ -265,7 +289,7 @@ poly which cargo   # e.g., cargo (v1.84.0)
 - [x] **Phase 1: Core Engine, PURL Routing & Native Delegation**
 - [x] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (Cryptographic SHA-256 Hashing)
 - [x] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
-- [x] **Phase 4: Remote CI Distributed Cache & Air-Gapped Registries** (`poly cache`, `poly registry`)
+- [x] **Phase 4: Remote CI Distributed Cache & Hosted Cloud API Bridge** (`poly cache`, `poly login`, `poly cache status`, `poly cache purge`, `poly registry`)
 - [x] **Phase 5: Model Context Protocol (MCP) Server & AI Agent Mesh** (`poly mcp`, `poly init --ide`)
 - [x] **Phase 6: Enterprise Ecosystem Extensions**
   - [x] Automated Security Auto-Healer (`poly fix`) & Multi-Engine Updater (`poly update`)

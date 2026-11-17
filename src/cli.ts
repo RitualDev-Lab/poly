@@ -4,6 +4,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { PolyCacheManager } from "./cache/index.js";
 import {
+  handleCachePurge,
+  handleCacheStatus,
+  handleLogin,
+  handleLogout,
+  handleWhoami,
+} from "./cloud/index.js";
+import {
   AttestationEngine,
   CrossStackAuditor,
   LicenseAuditor,
@@ -48,7 +55,10 @@ COMMANDS:
   fix [--dry-run]     Automatically patch vulnerabilities discovered during audit
   license             Audit license compliance and detect copyleft contamination risks (GPL/AGPL)
   sbom                Generate compliant CycloneDX v1.5 or SPDX v2.3 Software Bill of Materials
-  cache <cmd> [key]   Manage distributed CI dependency cache (save, restore, clean)
+  cache <cmd>         Manage CI dependency cache (save, restore, clean, status, purge)
+  login               Authenticate against hosted poly-cloud-api server (~/.poly/config.json)
+  logout              Remove stored poly-cloud-api authentication credentials
+  whoami              Show active authenticated identity and Poly Cloud API server
   registry test       Verify reachability and latency of enterprise registry mirrors
   doctor              Diagnose system health, toolchains, compilers, and network connectivity
   docker              Generate multi-stage production Dockerfile, compose, and devcontainer
@@ -67,7 +77,11 @@ OPTIONS:
   --json              Machine-readable JSON output mode across commands
   --output, -o <file> Save report or SBOM artifact to disk
   --filter <pattern>  Filter workspace members by directory path pattern
-  --all               Operate across all detected ecosystems in parallel
+  --url, -u <url>     Poly Cloud API server URL (for login, cache status)
+  --token, -t <tok>   Poly Cloud API authentication token
+  --workspace, -w <ws> Workspace slug (default: 'default')
+  --branch, -b <name> Branch name for cache operations (default: current git branch)
+  --all               Operate across all detected ecosystems in parallel / purge all branches
   --silent, -s        Suppress detailed subprocess stdout logs
   -h, --help          Show this help message
   -v, --version       Show poly version
@@ -121,17 +135,30 @@ async function main(): Promise<void> {
   const failOnRaw = getFlagVal("--fail-on")?.toUpperCase() as VulnerabilitySeverity | undefined;
   const formatRaw = getFlagVal("--format")?.toLowerCase();
   const outputFile = getFlagVal("--output", "-o");
+  const urlVal = getFlagVal("--url", "-u");
+  const tokenVal = getFlagVal("--token", "-t");
+  const workspaceVal = getFlagVal("--workspace", "-w") || getFlagVal("--team");
+  const branchVal = getFlagVal("--branch", "-b");
+
+  const flagNamesWithValues = new Set([
+    "--filter",
+    "--fail-on",
+    "--format",
+    "--output",
+    "-o",
+    "--url",
+    "-u",
+    "--token",
+    "-t",
+    "--workspace",
+    "-w",
+    "--team",
+    "--branch",
+    "-b",
+  ]);
 
   const positionalArgs = args
-    .filter(
-      (arg, idx, arr) =>
-        !arg.startsWith("-") &&
-        arr[idx - 1] !== "--filter" &&
-        arr[idx - 1] !== "--fail-on" &&
-        arr[idx - 1] !== "--format" &&
-        arr[idx - 1] !== "--output" &&
-        arr[idx - 1] !== "-o",
-    )
+    .filter((arg, idx, arr) => !arg.startsWith("-") && !flagNamesWithValues.has(arr[idx - 1]))
     .slice(1);
 
   try {
@@ -404,12 +431,62 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "login": {
+        const ok = await handleLogin({
+          url: urlVal,
+          token: tokenVal,
+          workspace: workspaceVal,
+        });
+        if (!ok) process.exit(1);
+        break;
+      }
+
+      case "logout": {
+        handleLogout();
+        break;
+      }
+
+      case "whoami": {
+        handleWhoami({ json: isJson });
+        break;
+      }
+
       case "cache": {
         const subCommand = positionalArgs[0]?.toLowerCase();
         const customKey = positionalArgs[1];
         const cacheManager = new PolyCacheManager();
 
-        if (subCommand === "save") {
+        if (subCommand === "login") {
+          const ok = await handleLogin({
+            url: urlVal,
+            token: tokenVal,
+            workspace: workspaceVal,
+          });
+          if (!ok) process.exit(1);
+        } else if (subCommand === "logout") {
+          handleLogout();
+        } else if (subCommand === "whoami") {
+          handleWhoami({ json: isJson });
+        } else if (subCommand === "status") {
+          const status = await handleCacheStatus({
+            url: urlVal,
+            token: tokenVal,
+            workspace: workspaceVal,
+            json: isJson,
+          });
+          if (!status || !status.healthy) {
+            process.exit(1);
+          }
+        } else if (subCommand === "purge") {
+          await handleCachePurge({
+            branch: branchVal || customKey,
+            all: isAll,
+            url: urlVal,
+            token: tokenVal,
+            workspace: workspaceVal,
+            cwd,
+          });
+        } else if (subCommand === "save") {
           logHeader("Saving dependency artifacts to distributed cache...");
           const res = await cacheManager.save(cwd, { key: customKey });
           const sizeMb = ((res.sizeBytes ?? 0) / (1024 * 1024)).toFixed(2);
@@ -433,7 +510,7 @@ async function main(): Promise<void> {
           logSuccess(`Purged ${res.removedKeys} cache entries (freed ${freedMb} MB)`);
         } else {
           logError(
-            "Invalid cache subcommand. Use: 'poly cache save', 'poly cache restore', or 'poly cache clean'",
+            "Invalid cache subcommand. Use: 'poly cache status', 'poly cache purge', 'poly cache save', 'poly cache restore', or 'poly login'",
           );
           process.exit(1);
         }

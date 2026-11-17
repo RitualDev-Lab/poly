@@ -284,23 +284,15 @@ poly which cargo   # e.g., cargo (v1.84.0)
 
 ---
 
-## Roadmap
-
-- [x] **Phase 1: Core Engine, PURL Routing & Native Delegation**
-- [x] **Phase 2: Polyglot Workspaces & Composite `poly.lock`** (Cryptographic SHA-256 Hashing)
-- [x] **Phase 3: Enterprise Cross-Stack CVE Auditing & SBOM** (`poly audit`, SPDX/CycloneDX)
-- [x] **Phase 4: Remote CI Distributed Cache & Hosted Cloud API Bridge** (`poly cache`, `poly login`, `poly cache status`, `poly cache purge`, `poly registry`)
-- [x] **Phase 5: Model Context Protocol (MCP) Server & AI Agent Mesh** (`poly mcp`, `poly init --ide`)
-- [x] **Phase 6: Enterprise Ecosystem Extensions**
-  - [x] Automated Security Auto-Healer (`poly fix`) & Multi-Engine Updater (`poly update`)
-  - [x] System Health & Toolchain Diagnostic Suite (`poly doctor`)
-  - [x] Polyglot Multi-Stage Container & DevContainer Generator (`poly docker`)
-  - [x] Official GitHub Action (`RitualDev-Lab/setup-poly@v1`)
-  - [x] Official VS Code Extension (`RitualDev-Lab/vscode-poly`)
-  - [x] Enterprise Cryptographic Attestation & Policy Gates (`poly attest`, `poly policy`)
-
----
-
 ## License
 
 MIT © [RitualDev Lab](https://ritualdev.in)
+
+---
+
+## 🛡️ Community & Governance
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Accessibility Statement](ACCESSIBILITY.md)
+- [License](LICENSE)

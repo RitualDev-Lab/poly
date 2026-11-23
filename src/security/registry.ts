@@ -139,7 +139,7 @@ export async function fetchRegistryMetadata(
           signal: controller.signal,
           headers: {
             Accept: "application/json",
-            "User-Agent": "poly-firewall/0.6.0 (developer@ritualdev.in)",
+            "User-Agent": "poly-firewall/0.6.1 (developer@ritualdev.in)",
           },
         },
       );

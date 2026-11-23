@@ -1,0 +1,21 @@
+# Universal Polyglot Package Management Rules (poly)
+
+When working in this repository, always use `poly` instead of guessing subfolder package managers:
+
+1. Package Management:
+   - Add packages: `poly add npm:<pkg>`, `poly add pypi:<pkg>`, `poly add cargo:<pkg>`, `poly add go:<pkg>`
+   - Dev dependencies: `poly add <pkg> -D`
+   - Remove packages: `poly remove <pkg>`
+   - Synchronize workspace: `poly sync`
+
+2. Testing & Running:
+   - Run test suites: `poly test`
+   - Run cross-stack tasks: `poly run <task>`
+
+3. Context-Saving Inspection:
+   - Inspect workspace: `poly list --json`
+   - Detect environments: `poly detect --json`
+   - Audit security: `poly audit --json`
+
+4. Guardrails:
+   - Never run raw `pip install`, `npm install`, or `cargo add` directly in subdirectories.

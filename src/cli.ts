@@ -20,17 +20,25 @@ import {
   type VulnerabilitySeverity,
   generateSarifReport,
 } from "./compliance/index.js";
+import { detectContexts, resolvePrimaryContext } from "./detector/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
 import { DockerGenerator } from "./docker/index.js";
 import { PolyDoctor } from "./doctor/index.js";
-import { PolyMcpServer, generateMcpConfig, setupIdeIntegration } from "./mcp/index.js";
+import {
+  PolyMcpServer,
+  generateMcpConfig,
+  installMcpConfig,
+  setupIdeIntegration,
+} from "./mcp/index.js";
 import { RegistryVerifier } from "./registry/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
 import {
   WorkspaceDispatcher,
   WorkspaceRunner,
+  extractDirectDependencies,
   loadWorkspaceConfig,
+  resolveWorkspaceMembers,
   verifyCompositeLockfile,
   writeCompositeLockfile,
 } from "./workspace/index.js";
@@ -50,6 +58,9 @@ COMMANDS:
   install, sync, i    Install & sync dependencies across workspace members
   update, up [pkg...] Upgrade dependencies across all ecosystems
   run <task>          Run cross-stack orchestrated tasks (e.g. 'poly run dev', 'poly run test')
+  test                Run unit and integration test suites across all stack members
+  list, ls            List all workspace members and direct dependencies (--json for compact)
+  detect              Detect and inspect ecosystems, manifests, and primary context (--json for compact)
   lock                Manage or verify composite 'poly.lock'
   audit               Scan dependencies across all ecosystems for known security vulnerabilities (OSV)
   fix [--dry-run]     Automatically patch vulnerabilities discovered during audit
@@ -64,8 +75,8 @@ COMMANDS:
   docker              Generate multi-stage production Dockerfile, compose, and devcontainer
   attest <cmd>        Generate, sign, or verify SLSA v1.0 in-toto supply chain attestations
   policy              Evaluate corporate compliance policy (license whitelist & CVE thresholds)
-  mcp                 Start stdio Model Context Protocol (MCP) server for AI coding agents
-  init [--ide]        Initialize workspace or generate IDE AI agent integrations (Cursor, Claude)
+  mcp [install]       Start stdio MCP server or 1-click install for Claude Desktop, Cursor, Windsurf
+  init [--ide]        Initialize workspace or generate AI agent guidelines (.cursorrules, CLAUDE.md)
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
 
 OPTIONS:
@@ -255,6 +266,156 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "test": {
+        const isJsonOutput = isJson || formatRaw === "json";
+        if (!isJsonOutput) {
+          logHeader("Running test suites across workspace members...");
+        }
+        const runner = new WorkspaceRunner();
+        const results = await runner.runTask(cwd, "test", {
+          filter: filterPattern,
+          silent: isSilent,
+        });
+
+        const failed = results.filter((r) => r.exitCode !== 0);
+        if (isJsonOutput) {
+          console.log(
+            JSON.stringify(
+              {
+                task: "test",
+                total: results.length,
+                passed: results.filter((r) => r.exitCode === 0).length,
+                failed: failed.length,
+                results: results.map((r) => ({
+                  member: r.member,
+                  command: r.command,
+                  exitCode: r.exitCode,
+                  success: r.exitCode === 0,
+                })),
+              },
+              null,
+              2,
+            ),
+          );
+        } else {
+          if (failed.length > 0) {
+            logError(
+              `Tests failed in ${failed.length} member(s): ${failed.map((f) => f.member).join(", ")}`,
+            );
+          } else {
+            logSuccess("All test suites passed successfully across all workspace targets.");
+          }
+        }
+
+        if (failed.length > 0) {
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "detect": {
+        const isJsonOutput = isJson || formatRaw === "json";
+        const contexts = detectContexts(cwd);
+        const primary = resolvePrimaryContext(cwd);
+
+        if (isJsonOutput) {
+          const compactOutput = {
+            root: cwd,
+            primary: primary.primary
+              ? {
+                  ecosystem: primary.primary.ecosystem,
+                  manifest: primary.primary.manifestFile,
+                  lockfile: primary.primary.lockfile,
+                  directory: path.relative(cwd, primary.primary.directory) || ".",
+                }
+              : null,
+            conflicts: primary.conflicts.map((c) => ({
+              ecosystem: c.ecosystem,
+              manifest: c.manifestFile,
+              lockfile: c.lockfile,
+              directory: path.relative(cwd, c.directory) || ".",
+            })),
+            environments: contexts.map((c) => ({
+              ecosystem: c.ecosystem,
+              manifest: c.manifestFile,
+              lockfile: c.lockfile,
+              directory: path.relative(cwd, c.directory) || ".",
+              distance: c.distance,
+            })),
+          };
+          console.log(JSON.stringify(compactOutput, null, 2));
+        } else {
+          logHeader("Detecting project environments and manifests...");
+          if (contexts.length === 0) {
+            console.log("No recognized manifests found in current directory or parent tree.");
+          } else {
+            console.log(`\nFound ${contexts.length} project environment(s):`);
+            for (const c of contexts) {
+              const relDir = path.relative(cwd, c.directory) || ".";
+              console.log(
+                `  • \x1b[1m${c.ecosystem}\x1b[0m at \x1b[36m${relDir}\x1b[0m (manifest: ${c.manifestFile}${c.lockfile ? `, lockfile: ${c.lockfile}` : ""})`,
+              );
+            }
+            if (primary.primary) {
+              logSuccess(
+                `Primary active ecosystem: ${primary.primary.ecosystem} (${primary.primary.manifestFile})`,
+              );
+            }
+          }
+        }
+        break;
+      }
+
+      case "list":
+      case "ls": {
+        const isJsonOutput = isJson || formatRaw === "json";
+        const members = resolveWorkspaceMembers(cwd);
+        const memberList = [];
+        let totalDepsCount = 0;
+
+        for (const m of members) {
+          const manifestPath = path.join(m.absoluteDir, m.context.manifestFile);
+          const deps = extractDirectDependencies(manifestPath, m.context.ecosystem);
+          totalDepsCount += deps.length;
+          memberList.push({
+            path: m.relativeDir,
+            ecosystem: m.context.ecosystem,
+            manifest: m.context.manifestFile,
+            lockfile: m.context.lockfile,
+            dependencyCount: deps.length,
+            dependencies: deps,
+          });
+        }
+
+        if (isJsonOutput) {
+          const compactOutput = {
+            workspace: path.basename(cwd),
+            totalMembers: members.length,
+            totalDependencies: totalDepsCount,
+            members: memberList,
+          };
+          console.log(JSON.stringify(compactOutput, null, 2));
+        } else {
+          logHeader(`Listing workspace members & dependencies (${members.length} members)...`);
+          for (const m of memberList) {
+            console.log(
+              `\n  \x1b[1m${m.path}\x1b[0m (\x1b[36m${m.ecosystem}\x1b[0m — ${m.manifest}):`,
+            );
+            if (m.dependencies.length === 0) {
+              console.log("    (no direct dependencies declared)");
+            } else {
+              for (const dep of m.dependencies) {
+                console.log(`    • ${dep}`);
+              }
+            }
+          }
+          console.log(
+            `\nTotal: ${totalDepsCount} direct dependencies across ${members.length} workspace members.`,
+          );
+        }
+        break;
+      }
+
       case "lock": {
         if (isVerify) {
           const drift = verifyCompositeLockfile(cwd);
@@ -283,7 +444,10 @@ async function main(): Promise<void> {
       }
 
       case "audit": {
-        logHeader("Executing cross-stack vulnerability audit (OSV)...");
+        const isJsonOutput = isJson || formatRaw === "json";
+        if (!isJsonOutput) {
+          logHeader("Executing cross-stack vulnerability audit (OSV)...");
+        }
         const auditor = new CrossStackAuditor();
         const report = await auditor.audit(cwd, { failOn: failOnRaw });
 
@@ -295,8 +459,25 @@ async function main(): Promise<void> {
           } else {
             console.log(sarifJson);
           }
-        } else if (formatRaw === "json") {
-          const jsonStr = JSON.stringify(report, null, 2);
+        } else if (isJsonOutput) {
+          const compactReport = {
+            scannedPackages: report.scannedPackages,
+            vulnerablePackages: report.vulnerablePackages,
+            totalFindings: report.totalFindings,
+            clean: !report.hasFailure && report.totalFindings === 0,
+            hasFailure: report.hasFailure,
+            durationMs: report.durationMs,
+            findings: report.findings.map((f) => ({
+              package: f.packageName,
+              version: f.installedVersion,
+              ecosystem: f.ecosystem,
+              severity: f.severity,
+              summary: f.summary,
+              fixedVersion: f.fixedVersion,
+              memberPath: f.memberPath,
+            })),
+          };
+          const jsonStr = JSON.stringify(compactReport, null, 2);
           if (outputFile) {
             fs.writeFileSync(outputFile, jsonStr, "utf-8");
             logSuccess(`Exported JSON report to '${outputFile}'`);
@@ -326,7 +507,9 @@ async function main(): Promise<void> {
         }
 
         if (report.hasFailure) {
-          logError(`Audit failed: Vulnerabilities matching threshold '${failOnRaw}' detected.`);
+          if (!isJsonOutput) {
+            logError(`Audit failed: Vulnerabilities matching threshold '${failOnRaw}' detected.`);
+          }
           process.exit(1);
         }
         break;
@@ -844,8 +1027,33 @@ async function main(): Promise<void> {
       }
 
       case "mcp": {
-        const isConfig = args.includes("--config");
-        if (isConfig) {
+        const subCommand = positionalArgs[0]?.toLowerCase();
+        const isInstall = subCommand === "install" || args.includes("install");
+        const isConfig = args.includes("--config") || subCommand === "config";
+        const isJsonOutput = isJson || formatRaw === "json";
+
+        if (isInstall) {
+          const res = installMcpConfig(cwd);
+          if (isJsonOutput) {
+            console.log(JSON.stringify(res, null, 2));
+          } else {
+            logHeader("Auto-detecting and injecting Poly MCP server into AI coding agents...");
+            for (const target of res.targets) {
+              if (target.status === "created" || target.status === "updated") {
+                console.log(
+                  `  \x1b[32m✔\x1b[0m \x1b[1m${target.displayName}\x1b[0m: Injected poly into \x1b[36m${target.path}\x1b[0m (${target.status})`,
+                );
+              } else if (target.error) {
+                console.log(
+                  `  \x1b[33m▲\x1b[0m \x1b[1m${target.displayName}\x1b[0m: Skipped (${target.error})`,
+                );
+              }
+            }
+            logSuccess(
+              "Poly MCP server installed across detected AI coding agents (Claude Desktop, Cursor, Windsurf)!",
+            );
+          }
+        } else if (isConfig) {
           console.log(JSON.stringify(generateMcpConfig(), null, 2));
         } else {
           const server = new PolyMcpServer(cwd);
@@ -856,14 +1064,31 @@ async function main(): Promise<void> {
 
       case "init": {
         const isIde = args.includes("--ide");
+        const isJsonOutput = isJson || formatRaw === "json";
         if (isIde) {
           const target = (positionalArgs[0]?.toLowerCase() || "all") as "cursor" | "claude" | "all";
-          logHeader(`Configuring IDE extension & AI agent integration (${target})...`);
           const res = setupIdeIntegration(cwd, target);
-          for (const f of res.createdFiles) {
-            console.log(`  \x1b[32m✔\x1b[0m Created \x1b[1m${path.relative(cwd, f)}\x1b[0m`);
+          if (isJsonOutput) {
+            console.log(
+              JSON.stringify(
+                {
+                  success: true,
+                  target,
+                  files: res.createdFiles.map((f) => path.relative(cwd, f)),
+                },
+                null,
+                2,
+              ),
+            );
+          } else {
+            logHeader(`Configuring IDE extension & AI agent integration (${target})...`);
+            for (const f of res.createdFiles) {
+              console.log(`  \x1b[32m✔\x1b[0m Created \x1b[1m${path.relative(cwd, f)}\x1b[0m`);
+            }
+            logSuccess(
+              "AI coding assistant directives generated (.cursorrules, .cursor/rules/poly.mdc, CLAUDE.md)!",
+            );
           }
-          logSuccess("AI coding assistant configuration generated successfully.");
         } else {
           logHeader("Initializing poly workspace...");
           const tomlPath = path.join(cwd, "poly.toml");

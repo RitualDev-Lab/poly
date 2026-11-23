@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "poly": {
+      "command": "poly",
+      "args": ["mcp"]
+    }
+  }
+}

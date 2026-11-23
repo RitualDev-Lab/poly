@@ -283,23 +283,31 @@ poly cache purge --all
 poly logout
 ```
 
-### AI Coding Agent Protocol (MCP) & IDE Extensions
+### AI Coding Agent Optimization (Claude Code, Cursor & Windsurf)
+
+Poly is designed from the ground up as the native package orchestrator for autonomous AI coding agents:
 
 ```bash
-# Start the stdio Model Context Protocol (MCP) server for AI coding agents
-poly mcp
+# 1-Click MCP Setup: Auto-detects Claude Desktop, Cursor, and Windsurf and injects Poly's MCP server
+poly mcp install
 
-# Output ready-to-paste MCP client configuration for Cursor or Claude Desktop
-poly mcp --config
-
-# Automatically configure IDE extensions and AI rules (.cursor/mcp.json, .cursor/rules/poly.mdc)
-poly init --ide cursor
-poly init --ide claude
+# Auto-generate agent prompt directives (.cursorrules, .cursor/rules/poly.mdc, CLAUDE.md)
 poly init --ide all
 
-# Machine-readable output mode across commands
-poly which npm --json
-poly lock --verify --json
+# Token-Efficient Inspection Mode: Saves ~80% context tokens for coding agents
+poly detect --json     # Concise detected environments and primary ecosystem
+poly list --json       # Compact workspace members & direct dependency map
+poly audit --json      # Streamlined vulnerability report with zero preamble noise
+
+# Universal Test & Task Runner (prevents agents from guessing subfolder commands)
+poly test              # Runs test suites across all stack members (Node, Python, Rust, Go)
+poly run <task>        # Runs cross-stack tasks (e.g. 'poly run build', 'poly run dev')
+
+# Start stdio Model Context Protocol (MCP) server directly
+poly mcp
+
+# Output raw MCP client configuration JSON snippet
+poly mcp --config
 ```
 
 ### Inspecting Active Engines

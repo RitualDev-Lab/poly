@@ -3,7 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { generateCursorRule, generateMcpConfig, setupIdeIntegration } from "../src/mcp/config.js";
+import {
+  generateClaudeMd,
+  generateCursorRule,
+  generateCursorRulesRoot,
+  generateMcpConfig,
+  installMcpConfig,
+  setupIdeIntegration,
+} from "../src/mcp/config.js";
 import { handleToolCall } from "../src/mcp/handlers.js";
 import { POLY_MCP_RESOURCES, handleResourceRead } from "../src/mcp/resources.js";
 import { PolyMcpServer } from "../src/mcp/server.js";
@@ -186,20 +193,76 @@ test("IDE Extensions & AI Agent Configuration Generator", async (t) => {
     assert.match(rule, /poly add pypi:<package>/);
   });
 
+  await t.test("generates root .cursorrules with clean instructions", () => {
+    const rootRule = generateCursorRulesRoot();
+    assert.match(rootRule, /poly add/);
+    assert.match(rootRule, /poly test/);
+    assert.match(rootRule, /poly list --json/);
+  });
+
+  await t.test("generates CLAUDE.md with autonomous coding agent rules", () => {
+    const claudeMd = generateClaudeMd();
+    assert.match(claudeMd, /CLAUDE\.md/);
+    assert.match(claudeMd, /poly add <ecosystem>:<package>/);
+    assert.match(claudeMd, /poly test/);
+    assert.match(claudeMd, /poly detect --json/);
+  });
+
   await t.test("sets up Cursor and Claude configuration files in project", () => {
     const res = setupIdeIntegration(tmpDir, "all");
-    assert.equal(res.createdFiles.length, 3);
+    assert.equal(res.createdFiles.length, 5);
 
     const cursorMcpPath = path.join(tmpDir, ".cursor", "mcp.json");
     const cursorRulePath = path.join(tmpDir, ".cursor", "rules", "poly.mdc");
+    const rootCursorRulePath = path.join(tmpDir, ".cursorrules");
+    const claudeMdPath = path.join(tmpDir, "CLAUDE.md");
     const claudePath = path.join(tmpDir, "claude_mcp_config.json");
 
     assert.ok(fs.existsSync(cursorMcpPath));
     assert.ok(fs.existsSync(cursorRulePath));
+    assert.ok(fs.existsSync(rootCursorRulePath));
+    assert.ok(fs.existsSync(claudeMdPath));
     assert.ok(fs.existsSync(claudePath));
 
     const mcpJson = JSON.parse(fs.readFileSync(cursorMcpPath, "utf-8"));
     assert.equal(mcpJson.mcpServers.poly.command, "poly");
+  });
+
+  await t.test("installMcpConfig injects into Claude, Cursor, and Windsurf configs", () => {
+    const customClaudePath = path.join(tmpDir, "claude_desktop_config.json");
+    const customCursorPath = path.join(tmpDir, "global_cursor_mcp.json");
+    const customWindsurfPath = path.join(tmpDir, "windsurf_mcp_config.json");
+
+    // Pre-populate with existing server to ensure preservation
+    fs.writeFileSync(
+      customClaudePath,
+      JSON.stringify({ mcpServers: { existingServer: { command: "node", args: ["server.js"] } } }),
+      "utf-8",
+    );
+
+    const res = installMcpConfig(tmpDir, {
+      customClaudePath,
+      customCursorPath,
+      customWindsurfPath,
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.targets.length, 5);
+
+    // Verify Claude Desktop has both existing and poly server
+    const claudeData = JSON.parse(fs.readFileSync(customClaudePath, "utf-8"));
+    assert.ok(claudeData.mcpServers.existingServer);
+    assert.equal(claudeData.mcpServers.poly.command, "poly");
+
+    // Verify Cursor Workspace
+    const cursorWsData = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, ".cursor", "mcp.json"), "utf-8"),
+    );
+    assert.equal(cursorWsData.mcpServers.poly.command, "poly");
+
+    // Verify Windsurf
+    const windsurfData = JSON.parse(fs.readFileSync(customWindsurfPath, "utf-8"));
+    assert.equal(windsurfData.mcpServers.poly.command, "poly");
   });
 
   fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -1,0 +1,29 @@
+---
+description: Universal Polyglot Package Management Rules (poly)
+globs: ["**/package.json", "**/pyproject.toml", "**/Cargo.toml", "**/go.mod", "**/poly.toml"]
+---
+
+# Polyglot Package Management Guidelines
+
+When adding, removing, or synchronizing dependencies across this repository, ALWAYS use the `poly` universal CLI orchestrator.
+
+## Rules:
+1. **Never guess or invoke native package managers directly** (`pip`, `npm`, `cargo`, `yarn`, `pnpm`) when adding or removing packages.
+2. **Adding Dependencies**:
+   - Node.js: `poly add npm:<package>` (e.g. `poly add npm:zod`)
+   - Python: `poly add pypi:<package>` (e.g. `poly add pypi:fastapi`)
+   - Rust: `poly add cargo:<crate>` (e.g. `poly add cargo:tokio`)
+   - Go: `poly add go:<module>` (e.g. `poly add go:github.com/gin-gonic/gin`)
+   - Dev Dependencies: pass `-D` or `--dev` (e.g. `poly add npm:vitest -D`)
+3. **Removing Dependencies**:
+   - `poly remove <package>`
+4. **Synchronizing Monorepos**:
+   - Run `poly sync` or `poly install` to synchronize all workspace members in parallel.
+5. **Testing & Execution**:
+   - Run tests: `poly test`
+   - Run tasks: `poly run <task>`
+6. **Token-Efficient Inspection Mode**:
+   - Use `poly list --json` and `poly detect --json` for concise, structured state.
+7. **Security & Compliance Auditing**:
+   - Run `poly audit` to verify vulnerability-free dependencies.
+   - Run `poly lock --verify` to check for supply-chain drift.

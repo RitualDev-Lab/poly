@@ -13,6 +13,14 @@ export function logError(message: string): void {
   console.error(`\x1b[31m✖\x1b[0m \x1b[1m${message}\x1b[0m`);
 }
 
+export function logInfo(message: string): void {
+  console.log(`\x1b[36mℹ\x1b[0m ${message}`);
+}
+
+export function logWarning(message: string): void {
+  console.log(`\x1b[33m⚠\x1b[0m ${message}`);
+}
+
 export function logExecutionPlan(
   action: "add" | "remove" | "install" | "update",
   pkg?: PackageSpec,

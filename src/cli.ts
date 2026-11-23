@@ -39,6 +39,7 @@ import { executeBatchUpgrade, scanOutdatedDependencies } from "./outdated/index.
 import { parsePackageSpec } from "./purl/parser.js";
 import { RegistryVerifier } from "./registry/index.js";
 import { evaluateSandboxGate } from "./sandbox/index.js";
+import { FirewallBlockError, SupplyChainFirewall } from "./security/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
 import {
@@ -143,6 +144,10 @@ async function main(): Promise<void> {
   const isAgent = args.includes("--agent") || process.env.POLY_AGENT === "1";
   const isSandbox = args.includes("--sandbox") || isAgent;
   const isJson = args.includes("--json") || isAgent;
+  const allowUntested =
+    args.includes("--allow-untested") ||
+    args.includes("--no-quarantine") ||
+    process.env.POLY_ALLOW_UNTESTED === "1";
 
   // Extract flag values
   const getFlagVal = (flag: string, short?: string): string | undefined => {
@@ -220,6 +225,7 @@ async function main(): Promise<void> {
             cwd,
             sandbox: isSandbox,
             allowScripts,
+            allowUntested,
             agent: isAgent,
           });
           results.push({
@@ -1369,6 +1375,7 @@ async function main(): Promise<void> {
                 cwd,
                 sandbox: true,
                 allowScripts,
+                allowUntested,
                 agent: true,
               });
               results.push({ package: pkg, duration_ms: res.durationMs });
@@ -1499,6 +1506,51 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "firewall": {
+        const subCommand = positionalArgs[0]?.toLowerCase();
+        const targetPkg = positionalArgs[1];
+
+        if (subCommand === "check" && targetPkg) {
+          const pkgSpec = parsePackageSpec(targetPkg);
+          const firewall = new SupplyChainFirewall();
+          const evalResult = await firewall.evaluate(pkgSpec, {
+            allowUntested,
+            cwd,
+          });
+
+          if (isJson || isAgent) {
+            console.log(JSON.stringify(evalResult, null, 2));
+          } else {
+            logHeader(`Supply-Chain & License Firewall: ${targetPkg}`);
+            console.log(`  Package: ${evalResult.package} (${evalResult.ecosystem})`);
+            console.log(`  Target Version: ${evalResult.effectiveVersion}`);
+            console.log(`  License: ${evalResult.license}`);
+            if (evalResult.ageHours !== undefined) {
+              console.log(
+                `  Publish Age: ${evalResult.ageHours.toFixed(1)}h (quarantine threshold: ${evalResult.quarantineHours}h)`,
+              );
+            }
+            if (evalResult.rollbackOccurred) {
+              console.log(`\n\x1b[33m[QUARANTINE ROLLBACK]\x1b[0m ${evalResult.rollbackReason}`);
+            }
+            if (evalResult.blocked) {
+              console.log(`\n\x1b[31m[FIREWALL BLOCKED]\x1b[0m ${evalResult.blockReason}`);
+              if (evalResult.remediation) {
+                console.log(`  Remediation: ${evalResult.remediation}\n`);
+              }
+            } else {
+              logSuccess(
+                `Package '${targetPkg}' cleared supply-chain quarantine and license gate.`,
+              );
+            }
+          }
+        } else {
+          logError("Usage: 'poly firewall check <purl>'");
+          process.exit(1);
+        }
+        break;
+      }
+
       case "completion": {
         const shell = (positionalArgs[0]?.toLowerCase() || "bash") as SupportedShell;
         try {
@@ -1527,15 +1579,57 @@ async function main(): Promise<void> {
     }
   } catch (err) {
     if (isAgent || isJson) {
+      if (err instanceof FirewallBlockError) {
+        console.log(
+          JSON.stringify({
+            status: "error",
+            error: {
+              code: err.code,
+              message: err.message,
+              package: err.package,
+              version: err.version,
+              detected_license: err.detectedLicense,
+              age_hours: err.ageHours !== undefined ? Number(err.ageHours.toFixed(2)) : undefined,
+              quarantine_hours: err.quarantineHours,
+              rollback_version: err.rollbackVersion,
+              remediation: err.remediation,
+            },
+          }),
+        );
+        process.exit(1);
+      }
+      const genericCode =
+        typeof (err as Record<string, unknown>)?.code === "string"
+          ? ((err as Record<string, unknown>).code as string)
+          : "COMMAND_FAILED";
       console.log(
         JSON.stringify({
           status: "error",
-          code: "COMMAND_FAILED",
+          code: genericCode,
           message: (err as Error).message,
         }),
       );
       process.exit(1);
     }
+
+    if (err instanceof FirewallBlockError) {
+      console.error(
+        `\n\x1b[31m⛔ [poly:firewall] ${err.code === "LICENSE_VIOLATION" ? "License Compliance Violation" : "Quarantine Cooldown Violation"}\x1b[0m`,
+      );
+      console.error(`  • Package: ${err.package}${err.version ? `@${err.version}` : ""}`);
+      if (err.detectedLicense) {
+        console.error(`  • License: ${err.detectedLicense}`);
+      }
+      if (err.ageHours !== undefined) {
+        console.error(
+          `  • Publish Age: ${err.ageHours.toFixed(1)}h (quarantine threshold: ${err.quarantineHours}h)`,
+        );
+      }
+      console.error(`  • Reason: ${err.message}`);
+      console.error(`  💡 \x1b[33mRemediation:\x1b[0m ${err.remediation}\n`);
+      process.exit(1);
+    }
+
     logError((err as Error).message);
     process.exit(1);
   }

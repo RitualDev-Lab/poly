@@ -99,6 +99,10 @@ export const POLY_COMMANDS: CommandDefinition[] = [
     name: "sandbox",
     description: "Inspect package lifecycle scripts and verify supply-chain security",
   },
+  {
+    name: "firewall",
+    description: "Evaluate package against 24h quarantine cooldown and license compliance gate",
+  },
   { name: "completion", description: "Generate native shell tab auto-completion script" },
   { name: "which", description: "Show active CLI binary for an ecosystem (npm, pypi, cargo, go)" },
 ];
@@ -109,6 +113,8 @@ export const POLY_FLAGS = [
   "--agent",
   "--sandbox",
   "--allow-scripts",
+  "--allow-untested",
+  "--no-quarantine",
   "--frozen",
   "--verify",
   "--check",

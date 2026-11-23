@@ -15,4 +15,6 @@ export * from "./mcp/index.js";
 export * from "./doctor/index.js";
 export * from "./docker/index.js";
 export * from "./cloud/index.js";
+export * from "./sandbox/index.js";
+export * from "./security/index.js";
 export * from "./ui/index.js";

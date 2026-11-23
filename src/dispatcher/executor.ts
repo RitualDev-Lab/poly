@@ -9,9 +9,10 @@ import {
 import { parsePackageSpec } from "../purl/parser.js";
 import { RegistryRouter } from "../registry/index.js";
 import { evaluateSandboxGate, injectSandboxFlags } from "../sandbox/index.js";
+import { enforcePackageFirewall } from "../security/index.js";
 import type { Ecosystem, ExecutionResult, PackageSpec } from "../types.js";
 import { promptDisambiguation } from "../ui/prompt.js";
-import { logExecutionPlan, logSuccess } from "../ui/reporter.js";
+import { logExecutionPlan, logInfo, logSuccess } from "../ui/reporter.js";
 
 export interface DispatcherOptions {
   isDev?: boolean;
@@ -20,6 +21,7 @@ export interface DispatcherOptions {
   all?: boolean;
   sandbox?: boolean;
   allowScripts?: string[];
+  allowUntested?: boolean;
   agent?: boolean;
 }
 
@@ -38,7 +40,19 @@ export class PolyDispatcher {
       pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd, options?.agent);
     }
 
-    // 2. Pre-flight Supply-Chain Sandbox Check
+    // 2. Pre-flight Live Supply-Chain & License Firewall
+    const firewallResult = await enforcePackageFirewall(pkg, {
+      allowUntested: options?.allowUntested,
+      cwd,
+    });
+    if (firewallResult.rollbackOccurred) {
+      pkg.version = firewallResult.effectiveVersion;
+      if (!options?.silent && !options?.agent) {
+        logInfo(`[firewall] ${firewallResult.rollbackReason} (pass --allow-untested to bypass)`);
+      }
+    }
+
+    // 3. Pre-flight Supply-Chain Sandbox Check
     const isSandboxed = options?.sandbox || options?.agent || false;
     if (isSandboxed) {
       const gate = await evaluateSandboxGate(pkg, {

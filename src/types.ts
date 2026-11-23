@@ -46,6 +46,17 @@ export interface TaskDefinition {
   command?: string;
 }
 
+export interface SecurityConfig {
+  quarantineHours?: number;
+  quarantineAction?: "rollback" | "block";
+  licenses?: {
+    policy?: "allowlist" | "denylist";
+    allowed?: string[];
+    denied?: string[];
+    onViolation?: "block" | "warn";
+  };
+}
+
 export interface WorkspaceConfig {
   name: string;
   version?: string;
@@ -59,6 +70,7 @@ export interface WorkspaceConfig {
   };
   tasks?: Record<string, TaskDefinition | string>;
   scripts?: Record<string, TaskDefinition | string>;
+  security?: SecurityConfig;
 }
 
 export interface MemberLockSnapshot {

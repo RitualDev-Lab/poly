@@ -94,6 +94,31 @@ export function parseSimplePolyToml(content: string): WorkspaceConfig {
         config.tasks[key] = cleanVal;
         config.scripts[key] = cleanVal;
       }
+    } else if (currentSection === "security" || currentSection === "security.quarantine") {
+      if (!config.security) config.security = {};
+      const cleanVal = val.replace(/["']/g, "");
+      if (key === "quarantine_hours" || key === "quarantineHours") {
+        config.security.quarantineHours = Number.parseFloat(cleanVal);
+      }
+      if (key === "quarantine_action" || key === "quarantineAction") {
+        config.security.quarantineAction = cleanVal as "rollback" | "block";
+      }
+    } else if (currentSection === "security.licenses" || currentSection === "licenses") {
+      if (!config.security) config.security = {};
+      if (!config.security.licenses) config.security.licenses = {};
+      const cleanVal = val.replace(/["']/g, "");
+      if (key === "policy") config.security.licenses.policy = cleanVal as "allowlist" | "denylist";
+      if (key === "on_violation" || key === "onViolation") {
+        config.security.licenses.onViolation = cleanVal as "block" | "warn";
+      }
+      if (key === "allowed" || key === "allowed_licenses") {
+        const matches = val.match(/["']([^"']+)["']/g);
+        if (matches) config.security.licenses.allowed = matches.map((m) => m.replace(/["']/g, ""));
+      }
+      if (key === "denied" || key === "denied_licenses") {
+        const matches = val.match(/["']([^"']+)["']/g);
+        if (matches) config.security.licenses.denied = matches.map((m) => m.replace(/["']/g, ""));
+      }
     }
   }
 

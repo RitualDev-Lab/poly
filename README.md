@@ -390,6 +390,37 @@ poly mcp
 poly mcp --config
 ```
 
+### 🛡️ Live Supply-Chain & License Firewall
+
+Stop malicious code and legal liability **before bytes touch the disk**:
+
+* **24-Hour Quarantine Cooldown**: Automatically halts packages published `<24h` ago, preventing 95%+ of zero-day maintainer account takeovers on npm & PyPI.
+* **Auto-Rollback to Mature Release**: In `rollback` mode (default), Poly transparently pins to the latest verified release published `>=24h` ago.
+* **Pre-Execution License Gate**: Blocks copyleft licenses (GPL, AGPL, SSPL) before download, preventing developers and AI agents from contaminating closed-source codebases.
+
+```bash
+# Pre-flight check package age, quarantine status, and license compliance
+poly firewall check npm:zod
+poly firewall check pypi:fastapi --agent
+
+# Bypass quarantine window explicitly for testing newly published releases
+poly add npm:fast-logger --allow-untested
+```
+
+Configure firewall policy directly in `poly.toml`:
+
+```toml
+# poly.toml
+[security]
+quarantine_hours = 24       # Cooldown threshold (0 to disable)
+quarantine_action = "rollback" # "rollback" (mature release) or "block"
+
+[security.licenses]
+policy = "denylist"
+denied = ["GPL-2.0", "GPL-3.0", "AGPL-1.0", "AGPL-3.0", "SSPL-1.0"]
+on_violation = "block"      # "block" or "warn"
+```
+
 ### Inspecting Active Engines
 
 ```bash

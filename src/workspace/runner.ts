@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { type AffectedResult, resolveAffectedMembers } from "./affected.js";
 import { type ResolvedMember, loadWorkspaceConfig, resolveWorkspaceMembers } from "./config.js";
 
 export const DEV_COLORS = [
@@ -33,6 +34,26 @@ export interface DevServiceTarget {
   command: string;
   args: string[];
   ecosystem: string;
+}
+
+export interface TaskRunOptions {
+  filter?: string;
+  silent?: boolean;
+  affected?: boolean;
+  base?: string;
+  changedFiles?: string[];
+}
+
+export interface DevTargetOptions {
+  filter?: string;
+  affected?: boolean;
+  base?: string;
+  changedFiles?: string[];
+}
+
+export interface DevMatrixOptions extends DevTargetOptions {
+  session?: DevMatrixSession;
+  attachSignalHandler?: boolean;
 }
 
 /**
@@ -158,10 +179,19 @@ export class WorkspaceRunner {
   /**
    * Resolves service targets for cross-service parallel execution.
    */
-  resolveDevTargets(workspaceDir: string, options?: { filter?: string }): DevServiceTarget[] {
+  resolveDevTargets(workspaceDir: string, options?: DevTargetOptions): DevServiceTarget[] {
     const config = loadWorkspaceConfig(workspaceDir);
-    const members = resolveWorkspaceMembers(workspaceDir);
+    let members = resolveWorkspaceMembers(workspaceDir);
     const targets: DevServiceTarget[] = [];
+
+    if (options?.affected) {
+      const affectedInfo = resolveAffectedMembers(workspaceDir, {
+        baseRef: options.base,
+        changedFiles: options.changedFiles,
+        filter: options.filter,
+      });
+      members = affectedInfo.affectedMembers;
+    }
 
     // 1. Check for configured dev task/script in poly.toml ([scripts.dev] or [tasks.dev])
     const devDef = config?.scripts?.dev || config?.tasks?.dev;
@@ -213,17 +243,16 @@ export class WorkspaceRunner {
   /**
    * Runs the Cross-Service Dev Matrix in parallel with streaming colored prefixes and graceful SIGINT cleanup.
    */
-  async runDevMatrix(
-    workspaceDir: string,
-    options?: {
-      filter?: string;
-      session?: DevMatrixSession;
-      attachSignalHandler?: boolean;
-    },
-  ): Promise<TaskRunResult[]> {
-    const targets = this.resolveDevTargets(workspaceDir, { filter: options?.filter });
+  async runDevMatrix(workspaceDir: string, options?: DevMatrixOptions): Promise<TaskRunResult[]> {
+    const targets = this.resolveDevTargets(workspaceDir, options);
 
     if (targets.length === 0) {
+      if (options?.affected) {
+        console.log(
+          "\x1b[1;33m⚡ [poly]\x1b[0m Affected execution: 0 workspace members impacted by git changes.",
+        );
+        return [];
+      }
       throw new Error("No runnable services found in workspace for dev matrix.");
     }
 
@@ -272,10 +301,44 @@ export class WorkspaceRunner {
   async runTask(
     workspaceDir: string,
     taskName: string,
-    options?: { filter?: string; silent?: boolean },
+    options?: TaskRunOptions,
   ): Promise<TaskRunResult[]> {
     const config = loadWorkspaceConfig(workspaceDir);
-    const members = resolveWorkspaceMembers(workspaceDir);
+    let members = resolveWorkspaceMembers(workspaceDir);
+    let affectedInfo: AffectedResult | undefined;
+
+    if (options?.affected) {
+      affectedInfo = resolveAffectedMembers(workspaceDir, {
+        baseRef: options.base,
+        changedFiles: options.changedFiles,
+        filter: options.filter,
+      });
+
+      if (affectedInfo.affectedMembers.length === 0) {
+        if (!options.silent) {
+          console.log(
+            "\x1b[1;33m⚡ [poly]\x1b[0m Affected execution: 0 workspace members impacted by git changes. Skipping tasks.",
+          );
+        }
+        return [];
+      }
+
+      if (!options.silent) {
+        const skippedCount = affectedInfo.allMembers.length - affectedInfo.affectedMembers.length;
+        console.log(
+          `\x1b[1;36m⚡ [poly]\x1b[0m Affected execution: Running '\x1b[1m${taskName}\x1b[0m' on \x1b[1;32m${affectedInfo.affectedMembers.length}\x1b[0m affected project(s) (${skippedCount} skipped):`,
+        );
+        for (const m of affectedInfo.affectedMembers) {
+          const reasons = affectedInfo.affectedReasons.get(m.relativeDir) || [];
+          console.log(
+            `  \x1b[32m✔\x1b[0m \x1b[1m${m.relativeDir}\x1b[0m \x1b[90m(${reasons[0] || "Modified"})\x1b[0m`,
+          );
+        }
+        console.log("");
+      }
+
+      members = affectedInfo.affectedMembers;
+    }
 
     // 1. Check for configured task in poly.toml ([scripts] or [tasks])
     const taskDef = config?.scripts?.[taskName] || config?.tasks?.[taskName];
@@ -312,6 +375,7 @@ export class WorkspaceRunner {
       : members;
 
     if (matchingMembers.length === 0) {
+      if (options?.affected) return [];
       throw new Error(`No workspace members matched filter '${options?.filter ?? ""}'.`);
     }
 

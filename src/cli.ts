@@ -100,6 +100,8 @@ OPTIONS:
   --json              Machine-readable JSON output mode across commands
   --output, -o <file> Save report or SBOM artifact to disk
   --filter <pattern>  Filter workspace members by directory path pattern
+  --affected          Run tasks/tests only on projects affected by git changes
+  --base <ref>        Git base reference for affected diffing (default: origin/main)
   --url, -u <url>     Poly Cloud API server URL (for login, cache status)
   --token, -t <tok>   Poly Cloud API authentication token
   --workspace, -w <ws> Workspace slug (default: 'default')
@@ -115,6 +117,8 @@ EXAMPLES:
   poly add cargo:tokio
   poly install --frozen      # CI/CD mode: fails on untracked dependency drift
   poly sync                  # Synchronizes all polyglot monorepo members
+  poly test --affected       # Runs tests only on packages affected by git diff
+  poly run build --affected  # Builds only changed services & downstream consumers
   poly audit --fail-on high  # Fails build if HIGH or CRITICAL CVEs exist
   poly audit --format sarif -o security.sarif # Exports standard SARIF for GitHub
   poly license --check       # Flags forbidden AGPL/GPL copyleft licenses
@@ -144,6 +148,7 @@ async function main(): Promise<void> {
   const isAgent = args.includes("--agent") || process.env.POLY_AGENT === "1";
   const isSandbox = args.includes("--sandbox") || isAgent;
   const isJson = args.includes("--json") || isAgent;
+  const isAffected = args.includes("--affected");
   const allowUntested =
     args.includes("--allow-untested") ||
     args.includes("--no-quarantine") ||
@@ -161,6 +166,7 @@ async function main(): Promise<void> {
   };
 
   const filterPattern = getFlagVal("--filter");
+  const baseRef = getFlagVal("--base");
   const failOnRaw = getFlagVal("--fail-on")?.toUpperCase() as VulnerabilitySeverity | undefined;
   const formatRaw = getFlagVal("--format")?.toLowerCase();
   const outputFile = getFlagVal("--output", "-o");
@@ -175,6 +181,7 @@ async function main(): Promise<void> {
 
   const flagNamesWithValues = new Set([
     "--filter",
+    "--base",
     "--fail-on",
     "--format",
     "--output",
@@ -487,6 +494,8 @@ async function main(): Promise<void> {
         try {
           await runner.runDevMatrix(cwd, {
             filter: filterPattern,
+            affected: isAffected,
+            base: baseRef,
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
@@ -508,6 +517,8 @@ async function main(): Promise<void> {
           try {
             await runner.runDevMatrix(cwd, {
               filter: filterPattern,
+              affected: isAffected,
+              base: baseRef,
             });
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -517,11 +528,39 @@ async function main(): Promise<void> {
           break;
         }
 
-        logHeader(`Running task '${taskName}' across workspace members...`);
+        const isJsonOutput = isJson || formatRaw === "json" || isAgent;
+        if (!isJsonOutput && !isSilent) {
+          logHeader(`Running task '${taskName}' across workspace members...`);
+        }
         const results = await runner.runTask(cwd, taskName, {
           filter: filterPattern,
-          silent: isSilent,
+          silent: isSilent || isJsonOutput,
+          affected: isAffected,
+          base: baseRef,
         });
+
+        if (results.length === 0 && isAffected) {
+          if (isAgent || isJson) {
+            console.log(
+              JSON.stringify(
+                {
+                  status: "success",
+                  task: taskName,
+                  affected: true,
+                  executed: 0,
+                  message: "No affected workspace members detected. 0 tasks executed.",
+                },
+                null,
+                2,
+              ),
+            );
+          } else {
+            logSuccess(
+              `No affected workspace members detected. 0 tasks executed for '${taskName}'.`,
+            );
+          }
+          break;
+        }
 
         const failed = results.filter((r) => r.exitCode !== 0);
         if (failed.length > 0) {
@@ -537,14 +576,39 @@ async function main(): Promise<void> {
 
       case "test": {
         const isJsonOutput = isJson || formatRaw === "json";
-        if (!isJsonOutput) {
+        if (!isJsonOutput && !isSilent) {
           logHeader("Running test suites across workspace members...");
         }
         const runner = new WorkspaceRunner();
         const results = await runner.runTask(cwd, "test", {
           filter: filterPattern,
-          silent: isSilent,
+          silent: isSilent || isJsonOutput,
+          affected: isAffected,
+          base: baseRef,
         });
+
+        if (results.length === 0 && isAffected) {
+          if (isJsonOutput) {
+            console.log(
+              JSON.stringify(
+                {
+                  task: "test",
+                  affected: true,
+                  total: 0,
+                  passed: 0,
+                  failed: 0,
+                  results: [],
+                  skipped: true,
+                },
+                null,
+                2,
+              ),
+            );
+          } else {
+            logSuccess("No affected workspace members detected. 0 tests executed.");
+          }
+          break;
+        }
 
         const failed = results.filter((r) => r.exitCode !== 0);
         if (isJsonOutput) {
@@ -552,6 +616,7 @@ async function main(): Promise<void> {
             JSON.stringify(
               {
                 task: "test",
+                affected: isAffected,
                 total: results.length,
                 passed: results.filter((r) => r.exitCode === 0).length,
                 failed: failed.length,

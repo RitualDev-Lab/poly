@@ -52,15 +52,43 @@ Switching cognitive context between `pnpm add`, `uv add`, `cargo add`, and `go g
 
 ---
 
-## Quickstart
+## Installation
 
-### Installation
+`poly` is available as a **zero-dependency standalone native binary** for Linux, macOS, and Windows (no Node.js or npm required), as well as via Homebrew, Scoop, and npm.
 
+### Standalone 1-Line Installers (Recommended)
+
+#### Linux & macOS
+```bash
+curl -fsSL https://poly.ritualdev.in/install.sh | sh
+```
+
+#### Windows (PowerShell)
+```powershell
+irm https://poly.ritualdev.in/install.ps1 | iex
+```
+
+---
+
+### Package Managers
+
+#### Homebrew (macOS & Linux)
+```bash
+brew install RitualDev-Lab/tap/poly
+```
+
+#### Scoop (Windows)
+```powershell
+scoop bucket add ritualdev https://github.com/RitualDev-Lab/scoop-bucket
+scoop install poly
+```
+
+#### npm / npx
 ```bash
 # Global install via npm
 npm install -g @ritualdev-lab/poly
 
-# Or run instantly via npx
+# Or run on-demand via npx
 npx @ritualdev-lab/poly add pypi:fastapi
 ```
 

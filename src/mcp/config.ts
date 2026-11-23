@@ -189,27 +189,30 @@ This repository is managed by **Poly** (\`poly\`), the universal polyglot packag
 ## Critical Rules for Autonomous Coding Agents:
 1. **Never guess or invoke native package managers directly**:
    - ❌ Do NOT run \`npm install\`, \`pnpm add\`, \`yarn add\`, \`pip install\`, \`uv add\`, or \`cargo add\` in subdirectories.
-   - ✔ ALWAYS use \`poly add\`, \`poly remove\`, and \`poly sync\`.
+   - ✔ ALWAYS use \`poly add --agent\`, \`poly remove\`, and \`poly sync\`.
 
-2. **Package Management Commands**:
-   - **Add Dependency**: \`poly add <ecosystem>:<package>\`
-     - Node.js: \`poly add npm:zod\`
-     - Python: \`poly add pypi:fastapi\`
-     - Rust: \`poly add cargo:tokio\`
-     - Go: \`poly add go:github.com/gin-gonic/gin\`
-   - **Dev Dependency**: Add \`-D\` or \`--dev\` (e.g. \`poly add npm:vitest -D\`)
+2. **Package Management Commands (Token-Saving & Sandboxed)**:
+   - **Add Dependency**: \`poly add <ecosystem>:<package>\` (use \`--agent\` for token savings & sandboxing)
+     - Node.js: \`poly add --agent npm:zod\`
+     - Python: \`poly add --agent pypi:fastapi\`
+     - Rust: \`poly add --agent cargo:tokio\`
+     - Go: \`poly add --agent go:github.com/gin-gonic/gin\`
+   - **Supply-Chain Sandboxing**: \`poly add --agent\` automatically neutralizes malicious postinstall lifecycle scripts (\`--ignore-scripts\`).
+   - **Dev Dependency**: Add \`-D\` or \`--dev\` (e.g. \`poly add --agent npm:vitest -D\`)
    - **Remove Dependency**: \`poly remove <package>\`
-   - **Synchronize Monorepo**: \`poly sync\` or \`poly install\`
+   - **Synchronize Monorepo**: \`poly sync\` or \`poly install --agent\`
 
 3. **Task & Test Orchestration**:
+   - Run dev matrix: \`poly dev\` (parallel microservice execution with colored streaming)
    - Run tests: \`poly test\` (orchestrates unit test suites across all stack members)
    - Run tasks: \`poly run build\`, \`poly run dev\`, \`poly run <task>\`
 
-4. **Token-Efficient Inspection (--json Mode)**:
-   - When inspecting workspace state, always use structured \`--json\` flags to minimize token usage:
+4. **Token-Efficient Inspection (--agent / --json Mode)**:
+   - When inspecting workspace state, always use structured \`--json\` flags to save ~80% context tokens:
      - \`poly detect --json\`: Inspect detected project ecosystems and manifests.
      - \`poly list --json\`: List all workspace members and direct dependencies.
      - \`poly audit --json\`: Concise OSV security vulnerability report.
+     - \`poly outdated --json\`: High-speed concurrent registry outdated scan.
 
 5. **Security & Drift Verification**:
    - Scan vulnerabilities: \`poly audit --fail-on high\`
@@ -226,13 +229,15 @@ export function generateCursorRulesRoot(): string {
 
 When working in this repository, always use \`poly\` instead of guessing subfolder package managers:
 
-1. Package Management:
-   - Add packages: \`poly add npm:<pkg>\`, \`poly add pypi:<pkg>\`, \`poly add cargo:<pkg>\`, \`poly add go:<pkg>\`
-   - Dev dependencies: \`poly add <pkg> -D\`
+1. Package Management (Token-Saving & Sandboxed):
+   - Add packages: \`poly add --agent npm:<pkg>\`, \`poly add --agent pypi:<pkg>\`, \`poly add --agent cargo:<pkg>\`, \`poly add --agent go:<pkg>\`
+   - Alternatively: \`poly agent add <purl>\` (neutralizes untrusted lifecycle scripts with --ignore-scripts)
+   - Dev dependencies: \`poly add --agent <pkg> -D\`
    - Remove packages: \`poly remove <pkg>\`
-   - Synchronize workspace: \`poly sync\`
+   - Synchronize workspace: \`poly sync\` or \`poly install --agent\`
 
 2. Testing & Running:
+   - Run dev matrix: \`poly dev\`
    - Run test suites: \`poly test\`
    - Run cross-stack tasks: \`poly run <task>\`
 
@@ -240,9 +245,11 @@ When working in this repository, always use \`poly\` instead of guessing subfold
    - Inspect workspace: \`poly list --json\`
    - Detect environments: \`poly detect --json\`
    - Audit security: \`poly audit --json\`
+   - Outdated packages: \`poly outdated --json\`
 
 4. Guardrails:
    - Never run raw \`pip install\`, \`npm install\`, or \`cargo add\` directly in subdirectories.
+   - Always prefer \`--agent\` or \`--json\` mode to avoid consuming excessive LLM context tokens.
 `;
 }
 

@@ -91,6 +91,14 @@ export const POLY_COMMANDS: CommandDefinition[] = [
     name: "init",
     description: "Initialize workspace or generate AI agent guidelines (.cursorrules, CLAUDE.md)",
   },
+  {
+    name: "agent",
+    description: "Run AI coding agent operations (token-efficient JSON output & script sandbox)",
+  },
+  {
+    name: "sandbox",
+    description: "Inspect package lifecycle scripts and verify supply-chain security",
+  },
   { name: "completion", description: "Generate native shell tab auto-completion script" },
   { name: "which", description: "Show active CLI binary for an ecosystem (npm, pypi, cargo, go)" },
 ];
@@ -98,6 +106,9 @@ export const POLY_COMMANDS: CommandDefinition[] = [
 export const POLY_FLAGS = [
   "--dev",
   "-D",
+  "--agent",
+  "--sandbox",
+  "--allow-scripts",
   "--frozen",
   "--verify",
   "--check",

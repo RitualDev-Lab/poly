@@ -8,9 +8,20 @@ import {
 } from "../engines/index.js";
 import { parsePackageSpec } from "../purl/parser.js";
 import { RegistryRouter } from "../registry/index.js";
+import { evaluateSandboxGate, injectSandboxFlags } from "../sandbox/index.js";
 import type { Ecosystem, ExecutionResult, PackageSpec } from "../types.js";
 import { promptDisambiguation } from "../ui/prompt.js";
 import { logExecutionPlan, logSuccess } from "../ui/reporter.js";
+
+export interface DispatcherOptions {
+  isDev?: boolean;
+  cwd?: string;
+  silent?: boolean;
+  all?: boolean;
+  sandbox?: boolean;
+  allowScripts?: string[];
+  agent?: boolean;
+}
 
 export class PolyDispatcher {
   private registryRouter = new RegistryRouter();
@@ -18,34 +29,53 @@ export class PolyDispatcher {
   /**
    * Resolves ecosystem and adds a package using the native manager
    */
-  async add(
-    packageInput: string,
-    options?: { isDev?: boolean; cwd?: string; silent?: boolean },
-  ): Promise<ExecutionResult> {
+  async add(packageInput: string, options?: DispatcherOptions): Promise<ExecutionResult> {
     const cwd = options?.cwd ?? process.cwd();
     const pkg = parsePackageSpec(packageInput, { isDev: options?.isDev });
 
     // 1. Resolve ecosystem if not explicitly prefixed
     if (!pkg.ecosystem) {
-      pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd);
+      pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd, options?.agent);
     }
 
-    // 2. Select native engine
+    // 2. Pre-flight Supply-Chain Sandbox Check
+    const isSandboxed = options?.sandbox || options?.agent || false;
+    if (isSandboxed) {
+      const gate = await evaluateSandboxGate(pkg, {
+        enabled: true,
+        allowScripts: options?.allowScripts,
+      });
+      if (gate.blocked) {
+        throw new Error(
+          `[SECURITY GATE] Package '${pkg.name}' was blocked by Poly supply-chain sandbox.\n` +
+            `Reason: ${gate.details}\n` +
+            `Remediation: ${gate.remediation}`,
+        );
+      }
+    }
+
+    // 3. Select native engine
     const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
     const { command, args } = engine.resolveAddArgs(pkg);
     const routedArgs = this.registryRouter.injectCliFlags(pkg.ecosystem, args, cwd);
     const routedEnv = this.registryRouter.injectEnvironmentVariables(pkg.ecosystem, cwd);
 
-    if (!options?.silent) {
-      logExecutionPlan("add", pkg, engine.name, command, routedArgs);
+    // 4. Inject Sandbox Flags (e.g. --ignore-scripts)
+    const finalArgs = injectSandboxFlags(pkg.ecosystem, command, routedArgs, pkg.name, {
+      enabled: isSandboxed,
+      allowScripts: options?.allowScripts,
+    });
+
+    if (!options?.silent && !options?.agent) {
+      logExecutionPlan("add", pkg, engine.name, command, finalArgs);
     }
 
-    // 3. Execute native command
-    const result = await engine.execute(command, routedArgs, cwd, {
-      silent: options?.silent,
+    // 5. Execute native command
+    const result = await engine.execute(command, finalArgs, cwd, {
+      silent: options?.silent || options?.agent,
       env: routedEnv,
     });
-    if (result.exitCode === 0 && !options?.silent) {
+    if (result.exitCode === 0 && !options?.silent && !options?.agent) {
       logSuccess(`Added ${pkg.name} (${pkg.ecosystem}) via ${engine.name}`, result.durationMs);
     }
 
@@ -55,10 +85,7 @@ export class PolyDispatcher {
   /**
    * Resolves ecosystem and removes a package using the native manager
    */
-  async remove(
-    packageInput: string,
-    options?: { cwd?: string; silent?: boolean },
-  ): Promise<ExecutionResult> {
+  async remove(packageInput: string, options?: DispatcherOptions): Promise<ExecutionResult> {
     const cwd = options?.cwd ?? process.cwd();
     const pkg = parsePackageSpec(packageInput);
 
@@ -84,12 +111,9 @@ export class PolyDispatcher {
   /**
    * Installs or syncs dependencies
    */
-  async install(options?: {
-    all?: boolean;
-    cwd?: string;
-    silent?: boolean;
-  }): Promise<ExecutionResult[]> {
+  async install(options?: DispatcherOptions): Promise<ExecutionResult[]> {
     const cwd = options?.cwd ?? process.cwd();
+    const isSandboxed = options?.sandbox || options?.agent || false;
 
     if (options?.all) {
       const allContexts = detectContexts(cwd);
@@ -106,8 +130,12 @@ export class PolyDispatcher {
           ctx.ecosystem,
           ctx.directory,
         );
-        const res = await engine.execute(command, routedArgs, ctx.directory, {
-          silent: options?.silent,
+        const finalArgs = injectSandboxFlags(ctx.ecosystem, command, routedArgs, undefined, {
+          enabled: isSandboxed,
+          allowScripts: options?.allowScripts,
+        });
+        const res = await engine.execute(command, finalArgs, ctx.directory, {
+          silent: options?.silent || options?.agent,
           env: routedEnv,
         });
         results.push(res);
@@ -121,7 +149,11 @@ export class PolyDispatcher {
     if (primary) {
       targetEcosystem = primary.ecosystem;
     } else if (conflicts.length > 0) {
-      targetEcosystem = await promptDisambiguation("dependencies", conflicts);
+      if (options?.agent) {
+        targetEcosystem = conflicts[0].ecosystem;
+      } else {
+        targetEcosystem = await promptDisambiguation("dependencies", conflicts);
+      }
     } else {
       throw new Error(`No project manifests found in '${cwd}' or parent directories.`);
     }
@@ -130,12 +162,16 @@ export class PolyDispatcher {
     const { command, args } = engine.resolveInstallArgs();
     const routedArgs = this.registryRouter.injectCliFlags(targetEcosystem, args, cwd);
     const routedEnv = this.registryRouter.injectEnvironmentVariables(targetEcosystem, cwd);
-    const result = await engine.execute(command, routedArgs, cwd, {
-      silent: options?.silent,
+    const finalArgs = injectSandboxFlags(targetEcosystem, command, routedArgs, undefined, {
+      enabled: isSandboxed,
+      allowScripts: options?.allowScripts,
+    });
+    const result = await engine.execute(command, finalArgs, cwd, {
+      silent: options?.silent || options?.agent,
       env: routedEnv,
     });
 
-    if (result.exitCode === 0 && !options?.silent) {
+    if (result.exitCode === 0 && !options?.silent && !options?.agent) {
       logSuccess(`Installed ${targetEcosystem} dependencies via ${engine.name}`, result.durationMs);
     }
 
@@ -145,33 +181,35 @@ export class PolyDispatcher {
   /**
    * Updates dependencies to their latest compatible versions
    */
-  async update(
-    packageInput?: string,
-    options?: { all?: boolean; cwd?: string; silent?: boolean },
-  ): Promise<ExecutionResult[]> {
+  async update(packageInput?: string, options?: DispatcherOptions): Promise<ExecutionResult[]> {
     const cwd = options?.cwd ?? process.cwd();
+    const isSandboxed = options?.sandbox || options?.agent || false;
 
     if (packageInput) {
       const pkg = parsePackageSpec(packageInput);
       if (!pkg.ecosystem) {
-        pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd);
+        pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd, options?.agent);
       }
 
       const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
       const { command, args } = engine.resolveUpdateArgs(pkg);
       const routedArgs = this.registryRouter.injectCliFlags(pkg.ecosystem, args, cwd);
       const routedEnv = this.registryRouter.injectEnvironmentVariables(pkg.ecosystem, cwd);
+      const finalArgs = injectSandboxFlags(pkg.ecosystem, command, routedArgs, pkg.name, {
+        enabled: isSandboxed,
+        allowScripts: options?.allowScripts,
+      });
 
-      if (!options?.silent) {
-        logExecutionPlan("update", pkg, engine.name, command, routedArgs);
+      if (!options?.silent && !options?.agent) {
+        logExecutionPlan("update", pkg, engine.name, command, finalArgs);
       }
 
-      const result = await engine.execute(command, routedArgs, cwd, {
-        silent: options?.silent,
+      const result = await engine.execute(command, finalArgs, cwd, {
+        silent: options?.silent || options?.agent,
         env: routedEnv,
       });
 
-      if (result.exitCode === 0 && !options?.silent) {
+      if (result.exitCode === 0 && !options?.silent && !options?.agent) {
         logSuccess(`Updated ${pkg.name} (${pkg.ecosystem}) via ${engine.name}`, result.durationMs);
       }
 
@@ -194,8 +232,12 @@ export class PolyDispatcher {
           ctx.ecosystem,
           ctx.directory,
         );
-        const res = await engine.execute(command, routedArgs, ctx.directory, {
-          silent: options?.silent,
+        const finalArgs = injectSandboxFlags(ctx.ecosystem, command, routedArgs, undefined, {
+          enabled: isSandboxed,
+          allowScripts: options?.allowScripts,
+        });
+        const res = await engine.execute(command, finalArgs, ctx.directory, {
+          silent: options?.silent || options?.agent,
           env: routedEnv,
         });
         results.push(res);
@@ -209,7 +251,11 @@ export class PolyDispatcher {
     if (primary) {
       targetEcosystem = primary.ecosystem;
     } else if (conflicts.length > 0) {
-      targetEcosystem = await promptDisambiguation("dependencies", conflicts);
+      if (options?.agent) {
+        targetEcosystem = conflicts[0].ecosystem;
+      } else {
+        targetEcosystem = await promptDisambiguation("dependencies", conflicts);
+      }
     } else {
       throw new Error(`No project manifests found in '${cwd}' or parent directories.`);
     }
@@ -218,12 +264,16 @@ export class PolyDispatcher {
     const { command, args } = engine.resolveUpdateArgs();
     const routedArgs = this.registryRouter.injectCliFlags(targetEcosystem, args, cwd);
     const routedEnv = this.registryRouter.injectEnvironmentVariables(targetEcosystem, cwd);
-    const result = await engine.execute(command, routedArgs, cwd, {
-      silent: options?.silent,
+    const finalArgs = injectSandboxFlags(targetEcosystem, command, routedArgs, undefined, {
+      enabled: isSandboxed,
+      allowScripts: options?.allowScripts,
+    });
+    const result = await engine.execute(command, finalArgs, cwd, {
+      silent: options?.silent || options?.agent,
       env: routedEnv,
     });
 
-    if (result.exitCode === 0 && !options?.silent) {
+    if (result.exitCode === 0 && !options?.silent && !options?.agent) {
       logSuccess(`Updated ${targetEcosystem} dependencies via ${engine.name}`, result.durationMs);
     }
 
@@ -244,7 +294,11 @@ export class PolyDispatcher {
     return { engine: engine.name, effectiveCli };
   }
 
-  private async resolveEcosystemForPackage(packageName: string, cwd: string): Promise<Ecosystem> {
+  private async resolveEcosystemForPackage(
+    packageName: string,
+    cwd: string,
+    agentMode = false,
+  ): Promise<Ecosystem> {
     const { primary, conflicts } = resolvePrimaryContext(cwd);
 
     if (primary) {
@@ -252,6 +306,9 @@ export class PolyDispatcher {
     }
 
     if (conflicts.length > 0) {
+      if (agentMode) {
+        return conflicts[0].ecosystem;
+      }
       return promptDisambiguation(packageName, conflicts);
     }
 

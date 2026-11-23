@@ -347,11 +347,26 @@ poly cache purge --all
 poly logout
 ```
 
-### AI Coding Agent Optimization (Claude Code, Cursor & Windsurf)
+### 🤖 The Default Package Manager for Autonomous AI Agents
 
-Poly is designed from the ground up as the native package orchestrator for autonomous AI coding agents:
+Autonomous coding agents (**Claude Code, Cursor, Windsurf, Devin, Codex**) struggle with dependency management—wasting 40% of their context windows reading verbose package manager progress bars, hallucinating commands in monorepos, and risking supply-chain attacks from unvetted lifecycle scripts.
+
+`poly` is built from the ground up as the native package orchestrator for AI agents:
 
 ```bash
+# Token-Efficient Output (--agent): Replaces 1,000 lines of npm/pip output with 3 lines of structured JSON
+poly add --agent npm:zod
+poly install --agent
+
+# Built-in Supply-Chain Script Sandboxing: Neutralizes malicious postinstall lifecycle scripts
+poly add --sandbox npm:shady-pkg
+poly sandbox check npm:shady-pkg       # Pre-flight lifecycle script inspection before installation
+
+# 1-Click Agent Command Shortcut: Turns on sandbox, non-interactive mode, and compact JSON
+poly agent add npm:zod
+poly agent install
+poly agent audit
+
 # 1-Click MCP Setup: Auto-detects Claude Desktop, Cursor, and Windsurf and injects Poly's MCP server
 poly mcp install
 
@@ -362,6 +377,7 @@ poly init --ide all
 poly detect --json     # Concise detected environments and primary ecosystem
 poly list --json       # Compact workspace members & direct dependency map
 poly audit --json      # Streamlined vulnerability report with zero preamble noise
+poly outdated --json   # Concurrent cross-ecosystem outdated scan in <300ms
 
 # Universal Test & Task Runner (prevents agents from guessing subfolder commands)
 poly test              # Runs test suites across all stack members (Node, Python, Rust, Go)

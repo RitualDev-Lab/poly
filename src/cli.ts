@@ -36,7 +36,9 @@ import {
   setupIdeIntegration,
 } from "./mcp/index.js";
 import { executeBatchUpgrade, scanOutdatedDependencies } from "./outdated/index.js";
+import { parsePackageSpec } from "./purl/parser.js";
 import { RegistryVerifier } from "./registry/index.js";
+import { evaluateSandboxGate } from "./sandbox/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
 import {
@@ -138,7 +140,9 @@ async function main(): Promise<void> {
   const isFrozen = args.includes("--frozen");
   const isVerify = args.includes("--verify") || args.includes("--check");
   const isSilent = args.includes("-s") || args.includes("--silent");
-  const isJson = args.includes("--json");
+  const isAgent = args.includes("--agent") || process.env.POLY_AGENT === "1";
+  const isSandbox = args.includes("--sandbox") || isAgent;
+  const isJson = args.includes("--json") || isAgent;
 
   // Extract flag values
   const getFlagVal = (flag: string, short?: string): string | undefined => {
@@ -159,6 +163,10 @@ async function main(): Promise<void> {
   const tokenVal = getFlagVal("--token", "-t");
   const workspaceVal = getFlagVal("--workspace", "-w") || getFlagVal("--team");
   const branchVal = getFlagVal("--branch", "-b");
+  const allowScriptsRaw = getFlagVal("--allow-scripts");
+  const allowScripts = allowScriptsRaw
+    ? allowScriptsRaw.split(",").map((s) => s.trim())
+    : undefined;
 
   const flagNamesWithValues = new Set([
     "--filter",
@@ -175,6 +183,7 @@ async function main(): Promise<void> {
     "--team",
     "--branch",
     "-b",
+    "--allow-scripts",
   ]);
 
   const positionalArgs = args
@@ -185,30 +194,95 @@ async function main(): Promise<void> {
     switch (command) {
       case "add": {
         if (positionalArgs.length === 0) {
-          logError("Missing package argument. Example: 'poly add pypi:fastapi' or 'poly add zod'");
+          if (isAgent || isJson) {
+            console.log(
+              JSON.stringify({
+                status: "error",
+                code: "MISSING_ARGUMENT",
+                message:
+                  "Missing package argument. Example: 'poly add pypi:fastapi' or 'poly add zod'",
+              }),
+            );
+          } else {
+            logError(
+              "Missing package argument. Example: 'poly add pypi:fastapi' or 'poly add zod'",
+            );
+          }
           process.exit(1);
         }
 
         const dispatcher = new PolyDispatcher();
+        const results = [];
         for (const pkg of positionalArgs) {
-          await dispatcher.add(pkg, { isDev, silent: isSilent, cwd });
+          const res = await dispatcher.add(pkg, {
+            isDev,
+            silent: isSilent || isAgent,
+            cwd,
+            sandbox: isSandbox,
+            allowScripts,
+            agent: isAgent,
+          });
+          results.push({
+            package: pkg,
+            engine: res.engine,
+            durationMs: res.durationMs,
+            success: res.exitCode === 0,
+          });
         }
         writeCompositeLockfile(cwd);
+
+        if (isAgent || isJson) {
+          console.log(
+            JSON.stringify({
+              status: "success",
+              action: "add",
+              packages: positionalArgs,
+              sandboxed: isSandbox,
+              lockfile_updated: true,
+              results,
+            }),
+          );
+        }
         break;
       }
 
       case "remove":
       case "rm": {
         if (positionalArgs.length === 0) {
-          logError("Missing package argument. Example: 'poly remove lodash'");
+          if (isAgent || isJson) {
+            console.log(
+              JSON.stringify({
+                status: "error",
+                code: "MISSING_ARGUMENT",
+                message: "Missing package argument. Example: 'poly remove lodash'",
+              }),
+            );
+          } else {
+            logError("Missing package argument. Example: 'poly remove lodash'");
+          }
           process.exit(1);
         }
 
         const dispatcher = new PolyDispatcher();
         for (const pkg of positionalArgs) {
-          await dispatcher.remove(pkg, { silent: isSilent, cwd });
+          await dispatcher.remove(pkg, {
+            silent: isSilent || isAgent,
+            cwd,
+            agent: isAgent,
+          });
         }
         writeCompositeLockfile(cwd);
+
+        if (isAgent || isJson) {
+          console.log(
+            JSON.stringify({
+              status: "success",
+              action: "remove",
+              packages: positionalArgs,
+              lockfile_updated: true,
+            }),
+          );
+        }
         break;
       }
 
@@ -218,18 +292,52 @@ async function main(): Promise<void> {
         const workspaceConfig = loadWorkspaceConfig(cwd);
 
         if (workspaceConfig || isFrozen || isAll) {
-          logHeader(`Synchronizing workspace (${isFrozen ? "FROZEN MODE" : "PARALLEL"})`);
+          if (!isAgent && !isJson) {
+            logHeader(`Synchronizing workspace (${isFrozen ? "FROZEN MODE" : "PARALLEL"})`);
+          }
           const wsDispatcher = new WorkspaceDispatcher();
           const results = await wsDispatcher.syncWorkspace(cwd, {
             frozen: isFrozen,
-            silent: isSilent,
+            silent: isSilent || isAgent,
           });
           const totalMs = results.reduce((acc, r) => acc + r.durationMs, 0);
-          logSuccess(`Synchronized ${results.length} workspace members in parallel`, totalMs);
+          if (isAgent || isJson) {
+            console.log(
+              JSON.stringify({
+                status: "success",
+                action: "sync",
+                members: results.length,
+                sandboxed: isSandbox,
+                frozen: isFrozen,
+                duration_ms: totalMs,
+                lockfile: "poly.lock",
+              }),
+            );
+          } else {
+            logSuccess(`Synchronized ${results.length} workspace members in parallel`, totalMs);
+          }
         } else {
           const dispatcher = new PolyDispatcher();
-          await dispatcher.install({ all: false, silent: isSilent, cwd });
+          const res = await dispatcher.install({
+            all: false,
+            silent: isSilent || isAgent,
+            cwd,
+            sandbox: isSandbox,
+            allowScripts,
+            agent: isAgent,
+          });
           writeCompositeLockfile(cwd);
+          if (isAgent || isJson) {
+            console.log(
+              JSON.stringify({
+                status: "success",
+                action: "install",
+                sandboxed: isSandbox,
+                duration_ms: res[0]?.durationMs ?? 0,
+                lockfile_updated: true,
+              }),
+            );
+          }
         }
         break;
       }
@@ -1236,6 +1344,161 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "agent": {
+        const subCommand = positionalArgs[0]?.toLowerCase();
+        const subArgs = positionalArgs.slice(1);
+
+        switch (subCommand) {
+          case "add": {
+            if (subArgs.length === 0) {
+              console.log(
+                JSON.stringify({
+                  status: "error",
+                  code: "MISSING_ARGUMENT",
+                  message: "Missing package spec. Example: 'poly agent add npm:zod'",
+                }),
+              );
+              process.exit(1);
+            }
+            const dispatcher = new PolyDispatcher();
+            const results = [];
+            for (const pkg of subArgs) {
+              const res = await dispatcher.add(pkg, {
+                isDev,
+                silent: true,
+                cwd,
+                sandbox: true,
+                allowScripts,
+                agent: true,
+              });
+              results.push({ package: pkg, duration_ms: res.durationMs });
+            }
+            writeCompositeLockfile(cwd);
+            console.log(
+              JSON.stringify({
+                status: "success",
+                action: "add",
+                packages: subArgs,
+                sandboxed: true,
+                lockfile_updated: true,
+                results,
+              }),
+            );
+            break;
+          }
+
+          case "install":
+          case "sync": {
+            const dispatcher = new PolyDispatcher();
+            const res = await dispatcher.install({
+              all: isAll,
+              silent: true,
+              cwd,
+              sandbox: true,
+              allowScripts,
+              agent: true,
+            });
+            writeCompositeLockfile(cwd);
+            console.log(
+              JSON.stringify({
+                status: "success",
+                action: "install",
+                sandboxed: true,
+                lockfile_updated: true,
+                operations: res.length,
+              }),
+            );
+            break;
+          }
+
+          case "audit": {
+            const auditor = new CrossStackAuditor();
+            const report = await auditor.audit(cwd);
+            const criticalOrHigh = report.findings.filter(
+              (f) => f.severity === "CRITICAL" || f.severity === "HIGH",
+            ).length;
+            console.log(
+              JSON.stringify({
+                status: "success",
+                action: "audit",
+                totalScanned: report.scannedPackages,
+                vulnerabilities: report.totalFindings,
+                highOrCritical: criticalOrHigh,
+                passed: criticalOrHigh === 0,
+              }),
+            );
+            break;
+          }
+
+          case "info":
+          case "status": {
+            const contexts = detectContexts(cwd);
+            const { primary } = resolvePrimaryContext(cwd);
+            console.log(
+              JSON.stringify({
+                status: "success",
+                primaryEcosystem: primary?.ecosystem ?? "none",
+                detectedEnvironments: contexts.map((c) => ({
+                  ecosystem: c.ecosystem,
+                  manifest: c.manifestFile,
+                  directory: path.relative(cwd, c.directory) || ".",
+                })),
+                lockfilePresent: fs.existsSync(path.join(cwd, "poly.lock")),
+                sandboxEnabled: true,
+              }),
+            );
+            break;
+          }
+
+          default:
+            console.log(
+              JSON.stringify({
+                status: "success",
+                agent: "poly-agent-mode",
+                availableCommands: ["add", "install", "sync", "audit", "info"],
+                guidelines:
+                  "Use 'poly agent add <purl>' for token-saving, script-sandboxed dependency additions.",
+              }),
+            );
+            break;
+        }
+        break;
+      }
+
+      case "sandbox": {
+        const subCommand = positionalArgs[0]?.toLowerCase();
+        const targetPkg = positionalArgs[1];
+
+        if (subCommand === "check" && targetPkg) {
+          const pkgSpec = parsePackageSpec(targetPkg);
+          const gate = await evaluateSandboxGate(pkgSpec, {
+            enabled: true,
+            allowScripts,
+          });
+
+          if (isJson || isAgent) {
+            console.log(JSON.stringify(gate, null, 2));
+          } else {
+            logHeader(`Supply-Chain Sandbox Inspection: ${targetPkg}`);
+            if (gate.safe) {
+              logSuccess(
+                `Package '${targetPkg}' has no dangerous lifecycle scripts. Safe for agents.`,
+              );
+            } else {
+              console.log("\n\x1b[31m[WARNING] Suspicious lifecycle script detected!\x1b[0m");
+              console.log(`Details: ${gate.details}`);
+              if (gate.remediation) {
+                console.log(`Remediation: ${gate.remediation}\n`);
+              }
+            }
+          }
+        } else {
+          logError("Usage: 'poly sandbox check <purl>'");
+          process.exit(1);
+        }
+        break;
+      }
+
       case "completion": {
         const shell = (positionalArgs[0]?.toLowerCase() || "bash") as SupportedShell;
         try {
@@ -1263,6 +1526,16 @@ async function main(): Promise<void> {
       }
     }
   } catch (err) {
+    if (isAgent || isJson) {
+      console.log(
+        JSON.stringify({
+          status: "error",
+          code: "COMMAND_FAILED",
+          message: (err as Error).message,
+        }),
+      );
+      process.exit(1);
+    }
     logError((err as Error).message);
     process.exit(1);
   }

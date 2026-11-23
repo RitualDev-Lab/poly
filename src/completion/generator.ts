@@ -6,6 +6,12 @@ import type { CommandDefinition, SupportedShell } from "./types.js";
 export const POLY_COMMANDS: CommandDefinition[] = [
   { name: "add", description: "Add dependencies across ecosystems (e.g. npm:zod, pypi:fastapi)" },
   {
+    name: "try",
+    aliases: ["x"],
+    description:
+      "Run ephemeral tools across ecosystems without permanent install (e.g. poly try pypi:yt-dlp)",
+  },
+  {
     name: "remove",
     aliases: ["rm"],
     description: "Remove dependencies using the active ecosystem manager",

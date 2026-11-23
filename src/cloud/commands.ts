@@ -54,10 +54,13 @@ export async function handleLogin(options: {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
       if (!apiUrl) {
-        const answer = await rl.question("Enter Poly Cloud API URL [http://localhost:8080]: ");
-        apiUrl = answer.trim() || "http://localhost:8080";
+        const answer = await rl.question("Enter Poly Cloud API URL [https://cache.ritualdev.in]: ");
+        apiUrl = answer.trim() || "https://cache.ritualdev.in";
       }
       if (!token) {
+        console.log(
+          "\x1b[36m🌐 Visit https://poly.ritualdev.in#cloud to generate your Poly Cloud API token.\x1b[0m\n",
+        );
         token = (await rl.question("Enter Poly API Token (poly_tok_...): ")).trim();
       }
       if (!workspace) {

@@ -38,7 +38,7 @@ import {
 import { executeBatchUpgrade, scanOutdatedDependencies } from "./outdated/index.js";
 import { parsePackageSpec } from "./purl/parser.js";
 import { RegistryVerifier } from "./registry/index.js";
-import { evaluateSandboxGate } from "./sandbox/index.js";
+import { evaluateSandboxGate, runEphemeralTry } from "./sandbox/index.js";
 import { FirewallBlockError, SupplyChainFirewall } from "./security/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
@@ -249,6 +249,28 @@ async function main(): Promise<void> {
             }),
           );
         }
+        break;
+      }
+
+      case "try":
+      case "x": {
+        if (positionalArgs.length === 0) {
+          logError("Missing package argument. Example: 'poly try pypi:yt-dlp -- --version'");
+          process.exit(1);
+        }
+        const targetPkg = positionalArgs[0];
+        const doubleDashIdx = args.indexOf("--");
+        let passThroughArgs: string[] = [];
+        if (doubleDashIdx !== -1) {
+          passThroughArgs = args.slice(doubleDashIdx + 1);
+        } else if (positionalArgs.length > 1) {
+          passThroughArgs = positionalArgs.slice(1);
+        }
+
+        const exitCode = await runEphemeralTry(targetPkg, passThroughArgs, {
+          silent: isSilent,
+        });
+        process.exit(exitCode);
         break;
       }
 

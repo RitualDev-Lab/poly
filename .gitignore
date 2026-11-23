@@ -4,3 +4,8 @@ coverage/
 *.log
 .DS_Store
 *.tgz
+bin/
+dist-bin/
+release/
+.bun-cache/
+

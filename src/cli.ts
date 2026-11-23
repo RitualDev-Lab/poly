@@ -35,7 +35,7 @@ import {
   writeCompositeLockfile,
 } from "./workspace/index.js";
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 
 const HELP_TEXT = `
 ⚡ poly — The Universal Polyglot CLI Package & Dependency Orchestrator

@@ -155,6 +155,45 @@ poly update pypi:fastapi
 poly update
 ```
 
+### Cross-Ecosystem Outdated & Upgrade Intelligence
+
+Scan package registries concurrently across **Node.js (npm), Python (PyPI), Rust (crates.io), and Go proxy** in under 300ms, printing a unified, color-coded semver table (`MAJOR`, `MINOR`, `PATCH`):
+
+```bash
+# Scan outdated dependencies across all workspace members
+poly outdated
+
+# Machine-readable output for CI/CD gates or AI agents
+poly outdated --json
+
+# Filter scan to a specific workspace directory
+poly outdated --filter services/ai
+
+# Guided batch upgrade: patches manifests & synchronizes poly.lock
+poly upgrade
+
+# Upgrade specific packages across ecosystems
+poly upgrade zod fastapi tokio
+```
+
+### Native Shell Auto-Completions (`poly completion`)
+
+Fast, zero-dependency tab completion for all subcommands, flags, workspace member targets, and dynamic task completions from `poly.toml` and `package.json` (`poly run <TAB>`):
+
+```bash
+# Bash (add to ~/.bashrc)
+eval "$(poly completion bash)"
+
+# Zsh (add to ~/.zshrc)
+eval "$(poly completion zsh)"
+
+# Fish (add to ~/.config/fish/config.fish)
+poly completion fish | source
+
+# PowerShell (add to $PROFILE)
+poly completion powershell | Out-String | Invoke-Expression
+```
+
 ### Workspace Operations & Deterministic Lockfiles
 
 ```bash

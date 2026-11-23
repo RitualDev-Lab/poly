@@ -11,6 +11,11 @@ import {
   handleWhoami,
 } from "./cloud/index.js";
 import {
+  type SupportedShell,
+  generateCompletionScript,
+  resolveDynamicCompletions,
+} from "./completion/index.js";
+import {
   AttestationEngine,
   CrossStackAuditor,
   LicenseAuditor,
@@ -30,6 +35,7 @@ import {
   installMcpConfig,
   setupIdeIntegration,
 } from "./mcp/index.js";
+import { executeBatchUpgrade, scanOutdatedDependencies } from "./outdated/index.js";
 import { RegistryVerifier } from "./registry/index.js";
 import type { Ecosystem } from "./types.js";
 import { logError, logHeader, logSuccess } from "./ui/reporter.js";
@@ -43,7 +49,7 @@ import {
   writeCompositeLockfile,
 } from "./workspace/index.js";
 
-const VERSION = "0.5.1";
+const VERSION = "0.6.0";
 
 const HELP_TEXT = `
 ⚡ poly — The Universal Polyglot CLI Package & Dependency Orchestrator
@@ -57,6 +63,8 @@ COMMANDS:
   remove, rm <pkg...> Remove dependencies using the active ecosystem manager
   install, sync, i    Install & sync dependencies across workspace members
   update, up [pkg...] Upgrade dependencies across all ecosystems
+  upgrade [pkg...]    Batch upgrade dependencies across monorepo and update poly.lock
+  outdated            Scan outdated dependencies across Node.js, Python, Rust, and Go (--json)
   run <task>          Run cross-stack orchestrated tasks (e.g. 'poly run dev', 'poly run test')
   test                Run unit and integration test suites across all stack members
   list, ls            List all workspace members and direct dependencies (--json for compact)
@@ -77,6 +85,7 @@ COMMANDS:
   policy              Evaluate corporate compliance policy (license whitelist & CVE thresholds)
   mcp [install]       Start stdio MCP server or 1-click install for Claude Desktop, Cursor, Windsurf
   init [--ide]        Initialize workspace or generate AI agent guidelines (.cursorrules, CLAUDE.md)
+  completion <shell>  Generate native shell tab auto-completion (bash, zsh, fish, powershell)
   which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
 
 OPTIONS:
@@ -225,8 +234,105 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "outdated": {
+        const isJsonOutput = isJson || formatRaw === "json";
+        if (!isJsonOutput) {
+          logHeader("Scanning dependencies across Node.js, Python, Rust, and Go...");
+        }
+
+        const report = await scanOutdatedDependencies(cwd, { filter: filterPattern });
+
+        if (isJsonOutput) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          if (report.outdatedCount === 0) {
+            logSuccess(
+              `All ${report.totalScanned} dependencies across ecosystems are up to date! (${report.durationMs}ms)`,
+            );
+          } else {
+            console.log(
+              `\nFound \x1b[1m${report.outdatedCount}\x1b[0m outdated package(s) across ${report.totalScanned} scanned (${report.durationMs}ms):\n`,
+            );
+
+            // Print formatted table
+            const headers = ["Package", "Current", "Latest", "Type", "Ecosystem", "Location"];
+            const colWidths = [24, 12, 12, 10, 12, 16];
+
+            const pad = (str: string, width: number) => str.padEnd(width).slice(0, width);
+            const headerRow = headers.map((h, i) => pad(h, colWidths[i])).join(" ");
+            console.log(`\x1b[4m${headerRow}\x1b[0m`);
+
+            for (const item of report.packages) {
+              const diffTag = item.diff.toUpperCase();
+              let coloredDiff = diffTag;
+              if (item.diff === "major") coloredDiff = `\x1b[31m${diffTag}\x1b[0m`;
+              else if (item.diff === "minor") coloredDiff = `\x1b[33m${diffTag}\x1b[0m`;
+              else if (item.diff === "patch") coloredDiff = `\x1b[32m${diffTag}\x1b[0m`;
+
+              const row = [
+                pad(item.name, colWidths[0]),
+                pad(item.current, colWidths[1]),
+                pad(item.latest, colWidths[2]),
+                pad(coloredDiff, colWidths[3] + (coloredDiff.length - diffTag.length)),
+                pad(item.ecosystem, colWidths[4]),
+                pad(item.memberPath, colWidths[5]),
+              ].join(" ");
+
+              console.log(row);
+            }
+
+            console.log(
+              "\n\x1b[90mLegend: \x1b[31mMAJOR\x1b[90m (Breaking) | \x1b[33mMINOR\x1b[90m (Features) | \x1b[32mPATCH\x1b[90m (Bug Fixes)\x1b[0m",
+            );
+            console.log(
+              `Summary: ${report.majorCount} major, ${report.minorCount} minor, ${report.patchCount} patch updates available.`,
+            );
+            console.log(
+              `Run '\x1b[1mpoly upgrade\x1b[0m' to automatically upgrade manifests and synchronize poly.lock.\n`,
+            );
+          }
+        }
+        break;
+      }
+
+      case "upgrade": {
+        const isJsonOutput = isJson || formatRaw === "json";
+        if (!isJsonOutput) {
+          logHeader("Batch-upgrading outdated dependencies across workspace...");
+        }
+
+        const report = await executeBatchUpgrade(cwd, {
+          packages: positionalArgs.length > 0 ? positionalArgs : undefined,
+          filter: filterPattern,
+        });
+
+        if (isJsonOutput) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          if (report.totalUpgraded === 0) {
+            logSuccess("No packages required upgrading. Workspace is already up to date.");
+          } else {
+            console.log("");
+            for (const res of report.results) {
+              if (res.success) {
+                console.log(
+                  `  \x1b[32m✔\x1b[0m [\x1b[36m${res.ecosystem}\x1b[0m] \x1b[1m${res.name}\x1b[0m: ${res.fromVersion} \x1b[32m➔\x1b[0m ${res.toVersion} (${res.memberPath})`,
+                );
+              } else {
+                console.log(
+                  `  \x1b[31m✖\x1b[0m [\x1b[36m${res.ecosystem}\x1b[0m] \x1b[1m${res.name}\x1b[0m: ${res.error}`,
+                );
+              }
+            }
+            logSuccess(
+              `Successfully upgraded ${report.totalUpgraded} package(s) and synchronized composite poly.lock (${report.durationMs}ms)!`,
+            );
+          }
+        }
+        break;
+      }
+
       case "update":
-      case "upgrade":
       case "up": {
         const dispatcher = new PolyDispatcher();
         if (positionalArgs.length > 0) {
@@ -1099,6 +1205,27 @@ async function main(): Promise<void> {
           } else {
             console.log("poly.toml already exists.");
           }
+        }
+        break;
+      }
+
+      case "completion": {
+        const shell = (positionalArgs[0]?.toLowerCase() || "bash") as SupportedShell;
+        try {
+          const script = generateCompletionScript(shell);
+          process.stdout.write(script);
+        } catch (err) {
+          logError((err as Error).message);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "__complete": {
+        const completeType = positionalArgs[0] || "commands";
+        const completions = resolveDynamicCompletions(completeType, cwd);
+        for (const c of completions) {
+          console.log(c);
         }
         break;
       }

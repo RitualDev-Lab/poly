@@ -82,7 +82,7 @@ export class AttestationEngine {
       predicateType: "https://slsa.dev/provenance/v1",
       predicate: {
         buildDefinition: {
-          buildType: "https://ritualdev.in/poly/slsa/v1",
+          buildType: "https://poly.ritualdev.in/slsa/v1",
           externalParameters: {
             workspaceDir: path.basename(wsDir),
             lockfileHash,

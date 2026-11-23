@@ -64,7 +64,7 @@ export function generateSarifReport(report: AuditReport): string {
           driver: {
             name: "poly",
             version: "0.1.0",
-            informationUri: "https://ritualdev.in/poly",
+            informationUri: "https://poly.ritualdev.in",
             rules,
           },
         },

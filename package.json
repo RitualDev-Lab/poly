@@ -46,7 +46,7 @@
   "bugs": {
     "url": "https://github.com/RitualDev-Lab/poly/issues"
   },
-  "homepage": "https://ritualdev.in/poly",
+  "homepage": "https://poly.ritualdev.in",
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.13.10",

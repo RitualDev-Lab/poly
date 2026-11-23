@@ -25,6 +25,10 @@ export const POLY_COMMANDS: CommandDefinition[] = [
     description: "Scan outdated dependencies across Node.js, Python, Rust, and Go",
   },
   {
+    name: "dev",
+    description: "Run unified cross-service parallel dev matrix with colored prefixes",
+  },
+  {
     name: "run",
     description: "Run cross-stack orchestrated tasks (e.g. poly run dev, poly run test)",
   },

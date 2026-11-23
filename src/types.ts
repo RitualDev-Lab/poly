@@ -58,6 +58,7 @@ export interface WorkspaceConfig {
     concurrency?: number;
   };
   tasks?: Record<string, TaskDefinition | string>;
+  scripts?: Record<string, TaskDefinition | string>;
 }
 
 export interface MemberLockSnapshot {

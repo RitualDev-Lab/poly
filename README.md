@@ -176,6 +176,31 @@ poly upgrade
 poly upgrade zod fastapi tokio
 ```
 
+### Cross-Service Dev Matrix (`poly dev`)
+
+Unify your heterogeneous development environment with a single command. `poly dev` concurrently launches frontend dev servers, Python AI backends, and Rust/Go services, streaming color-coded, uniformly aligned prefixes per service and guaranteeing graceful shutdown (killing process trees without leaving zombie ports on Ctrl+C):
+
+```toml
+# poly.toml
+[workspace]
+members = ["apps/*", "services/*"]
+
+[scripts]
+dev = { parallel = ["web:dev", "api:dev", "worker:dev"] }
+test = { parallel = ["web:test", "api:test", "worker:test"] }
+```
+
+```bash
+# Start all microservices in parallel with colored streaming prefixes
+poly dev
+
+# Filter to a specific service or slice
+poly dev --filter web
+
+# Run cross-stack test suite across all services
+poly test
+```
+
 ### Native Shell Auto-Completions (`poly completion`)
 
 Fast, zero-dependency tab completion for all subcommands, flags, workspace member targets, and dynamic task completions from `poly.toml` and `package.json` (`poly run <TAB>`):

@@ -346,6 +346,20 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "dev": {
+        const runner = new WorkspaceRunner();
+        try {
+          await runner.runDevMatrix(cwd, {
+            filter: filterPattern,
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          logError(message);
+          process.exit(1);
+        }
+        break;
+      }
+
       case "run": {
         const taskName = positionalArgs[0];
         if (!taskName) {
@@ -353,8 +367,21 @@ async function main(): Promise<void> {
           process.exit(1);
         }
 
-        logHeader(`Running task '${taskName}' across workspace members...`);
         const runner = new WorkspaceRunner();
+        if (taskName === "dev") {
+          try {
+            await runner.runDevMatrix(cwd, {
+              filter: filterPattern,
+            });
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            logError(message);
+            process.exit(1);
+          }
+          break;
+        }
+
+        logHeader(`Running task '${taskName}' across workspace members...`);
         const results = await runner.runTask(cwd, taskName, {
           filter: filterPattern,
           silent: isSilent,

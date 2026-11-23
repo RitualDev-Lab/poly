@@ -80,15 +80,19 @@ export function parseSimplePolyToml(content: string): WorkspaceConfig {
       if (key === "rust") config.engines.rust = cleanVal;
       if (key === "go") config.engines.go = cleanVal;
       if (key === "concurrency") config.engines.concurrency = Number.parseInt(cleanVal, 10);
-    } else if (currentSection === "tasks") {
+    } else if (currentSection === "tasks" || currentSection === "scripts") {
       if (!config.tasks) config.tasks = {};
-      // Tasks can be string commands or parallel arrays
-      const cleanVal = val.replace(/["']/g, "");
-      if (cleanVal.includes("[")) {
-        const matches = cleanVal.match(/["']([^"']+)["']/g);
-        config.tasks[key] = { parallel: matches ? matches.map((m) => m.replace(/["']/g, "")) : [] };
+      if (!config.scripts) config.scripts = {};
+      // Tasks / scripts can be string commands or parallel arrays: e.g. dev = { parallel = ["web:dev", "api:dev"] }
+      if (val.includes("[")) {
+        const matches = val.match(/["']([^"']+)["']/g);
+        const taskDef = { parallel: matches ? matches.map((m) => m.replace(/["']/g, "")) : [] };
+        config.tasks[key] = taskDef;
+        config.scripts[key] = taskDef;
       } else {
+        const cleanVal = val.replace(/["']/g, "");
         config.tasks[key] = cleanVal;
+        config.scripts[key] = cleanVal;
       }
     }
   }

@@ -106,18 +106,47 @@ test("Poly Cloud Config & Credentials Storage", async (t) => {
 
 test("Git Branch Detection & CLI Formatters", async (t) => {
   await t.test("getCurrentGitBranch resolves branch with env precedence", () => {
-    process.env.POLY_CACHE_BRANCH = "feat/custom-cache-branch";
-    assert.equal(getCurrentGitBranch(), "feat/custom-cache-branch");
-    // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
-    delete process.env.POLY_CACHE_BRANCH;
+    const keys = [
+      "POLY_CACHE_BRANCH",
+      "GITHUB_HEAD_REF",
+      "GITHUB_REF_NAME",
+      "CI_COMMIT_REF_NAME",
+      "GIT_BRANCH",
+    ] as const;
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) {
+      // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
+      delete process.env[k];
+    }
 
-    process.env.GITHUB_REF_NAME = "main-ci";
-    assert.equal(getCurrentGitBranch(), "main-ci");
-    // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
-    delete process.env.GITHUB_REF_NAME;
+    try {
+      process.env.POLY_CACHE_BRANCH = "feat/custom-cache-branch";
+      assert.equal(getCurrentGitBranch(), "feat/custom-cache-branch");
+      // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
+      delete process.env.POLY_CACHE_BRANCH;
 
-    const branch = getCurrentGitBranch();
-    assert.ok(typeof branch === "string" && branch.length > 0);
+      process.env.GITHUB_HEAD_REF = "feat/pr-head";
+      assert.equal(getCurrentGitBranch(), "feat/pr-head");
+      // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
+      delete process.env.GITHUB_HEAD_REF;
+
+      process.env.GITHUB_REF_NAME = "main-ci";
+      assert.equal(getCurrentGitBranch(), "main-ci");
+      // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
+      delete process.env.GITHUB_REF_NAME;
+
+      const branch = getCurrentGitBranch();
+      assert.ok(typeof branch === "string" && branch.length > 0);
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) {
+          // biome-ignore lint/performance/noDelete: process.env requires delete in Node.js
+          delete process.env[k];
+        } else {
+          process.env[k] = saved[k];
+        }
+      }
+    }
   });
 
   await t.test("formatBytes, formatDuration, renderProgressBar", () => {

@@ -1,0 +1,3 @@
+[console_scripts]
+poly = poly_build.cli:main
+poly-build = poly_build.cli:main

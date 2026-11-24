@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poly-build"
+version = "0.6.2"
+description = "The Universal Polyglot Monorepo Build System & Task Runner for Node.js, Python, Rust, and Go"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+authors = [
+    { name = "RitualDev Lab", email = "developer@ritualdev.in" }
+]
+keywords = [
+    "poly", "polyglot", "monorepo", "build-system", "cli", "package-manager",
+    "uv", "pnpm", "cargo", "go", "purl", "orchestrator", "ai-agents"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Build Tools",
+]
+
+[project.urls]
+Homepage = "https://poly.ritualdev.in"
+Repository = "https://github.com/RitualDev-Lab/poly"
+Issues = "https://github.com/RitualDev-Lab/poly/issues"
+Documentation = "https://poly.ritualdev.in/docs"
+
+[project.scripts]
+poly-build = "poly_build.cli:main"
+poly = "poly_build.cli:main"

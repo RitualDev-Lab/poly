@@ -1,0 +1,20 @@
+PackageIdentifier: RitualDevLab.Poly
+PackageVersion: 0.6.2
+PackageLocale: en-US
+Publisher: RitualDev Lab
+PublisherUrl: https://ritualdev.in
+PublisherSupportUrl: https://github.com/RitualDev-Lab/poly/issues
+Author: RitualDev Lab
+PackageName: Poly
+PackageUrl: https://poly.ritualdev.in
+License: MIT
+LicenseUrl: https://github.com/RitualDev-Lab/poly/blob/main/LICENSE
+ShortDescription: Universal polyglot monorepo package & dependency orchestrator for Node.js, Python, Rust, and Go.
+Tags:
+  - cli
+  - monorepo
+  - build-tool
+  - package-manager
+  - polyglot
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

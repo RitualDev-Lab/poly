@@ -1,0 +1,36 @@
+{% set name = "poly-build" %}
+{% set version = "0.6.2" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://files.pythonhosted.org/packages/source/{{ name[0] }}/{{ name }}/poly_build-{{ version }}.tar.gz
+  sha256: 0a7c3082fde134b6c79d4726fffcf58d94cdcf5ddcc25793345330c93b1386b4
+
+build:
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python >=3.8
+    - setuptools >=61.0
+    - pip
+  run:
+    - python >=3.8
+
+test:
+  imports:
+    - poly_build
+  commands:
+    - pip check
+
+about:
+  home: https://poly.ritualdev.in
+  summary: The Universal Polyglot Monorepo Build System & Task Runner for Node.js, Python, Rust, and Go
+  license: MIT
+  license_file: LICENSE
+  dev_url: https://github.com/RitualDev-Lab/poly

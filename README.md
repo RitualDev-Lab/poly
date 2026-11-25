@@ -50,6 +50,26 @@ Switching cognitive context between `pnpm add`, `uv add`, `cargo add`, and `go g
 - **Interactive Disambiguation**: When multiple manifests exist in the same directory, `poly` presents an inline selection prompt.
 - **AI Agent Friendly**: Eliminates shell syntax hallucination for autonomous coding agents.
 
+### Poly vs. Single-Ecosystem Monorepo Tools
+
+| Capability | Poly (`@ritualdev-lab/poly`) | Turborepo | Nx |
+| :--- | :---: | :---: | :---: |
+| **Native JS/TS + Python (`uv`) + Rust (`cargo`) + Go** | Built-in (`poly.toml`) | JS/TS primary | Plugins required |
+| **Composite Cryptographic Lockfile (`poly.lock`)** | Yes (SHA-256) | No | No |
+| **Built-in OSV Vulnerability Scan & `poly fix`** | Yes | No | Limited |
+| **Structured JSON Agent Output (`--agent`) + MCP** | Native | No | Limited |
+| **Zero-Cloud Local Cache** | Yes (default) | Yes (local) | Yes (local) |
+
+### "Built with Poly" Badge
+
+Show that your polyglot monorepo uses deterministic `poly` orchestration:
+
+[![Built with Poly](badges/built-with-poly.svg)](https://github.com/RitualDev-Lab/poly)
+
+```markdown
+[![Built with Poly](https://raw.githubusercontent.com/RitualDev-Lab/poly/main/badges/built-with-poly.svg)](https://github.com/RitualDev-Lab/poly)
+```
+
 ---
 
 ## Installation

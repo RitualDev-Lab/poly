@@ -41,11 +41,12 @@ export class SbomGenerator {
 
     const components = packages.map((pkg) => {
       const purlEcosystem = engineRegistry.getSbomPurlType(pkg.ecosystem);
+      const cleanVer = pkg.version.replace(/^[~^>=<\s]+/, "");
       return {
         type: "library",
         name: pkg.packageName,
-        version: pkg.version.replace(/^[~^>=<]/, ""),
-        purl: `pkg:${purlEcosystem}/${pkg.packageName}@${pkg.version.replace(/^[~^>=<]/, "")}`,
+        version: cleanVer,
+        purl: `pkg:${purlEcosystem}/${pkg.packageName}@${cleanVer}`,
         licenses: [
           {
             license: {
@@ -93,7 +94,7 @@ export class SbomGenerator {
       return {
         name: pkg.packageName,
         SPDXID: `SPDXRef-Package-${safeId}-${idx}`,
-        versionInfo: pkg.version.replace(/^[~^>=<]/, ""),
+        versionInfo: pkg.version.replace(/^[~^>=<\s]+/, ""),
         downloadLocation: "NOASSERTION",
         filesAnalyzed: false,
         licenseConcluded: pkg.license,

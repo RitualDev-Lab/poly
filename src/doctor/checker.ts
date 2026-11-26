@@ -19,6 +19,7 @@ export class PolyDoctor {
     this.checkPythonToolchain(checks);
     this.checkRustToolchain(checks);
     this.checkGoToolchain(checks);
+    this.checkBackendAndMobileToolchains(checks);
 
     // 2. Build Environment
     this.checkBuildEnvironment(checks);
@@ -230,6 +231,60 @@ export class PolyDoctor {
         message: "Go toolchain not found in PATH. (Optional if no Go modules).",
         remediation: "Install Go from https://golang.org/dl",
       });
+    }
+  }
+
+  private checkBackendAndMobileToolchains(checks: DiagnosticCheckItem[]): void {
+    const toolchains: Array<{
+      id: string;
+      name: string;
+      cmd: string;
+      args: string[];
+      hint: string;
+    }> = [
+      {
+        id: "toolchain-dotnet",
+        name: ".NET / NuGet CLI",
+        cmd: "dotnet",
+        args: ["--version"],
+        hint: "https://dotnet.microsoft.com",
+      },
+      {
+        id: "toolchain-composer",
+        name: "PHP Composer",
+        cmd: "composer",
+        args: ["--version"],
+        hint: "https://getcomposer.org",
+      },
+      {
+        id: "toolchain-bundler",
+        name: "Ruby Bundler",
+        cmd: "bundle",
+        args: ["--version"],
+        hint: "https://bundler.io",
+      },
+      {
+        id: "toolchain-dart",
+        name: "Dart / Flutter Pub",
+        cmd: "dart",
+        args: ["--version"],
+        hint: "https://dart.dev/get-dart",
+      },
+    ];
+
+    for (const tc of toolchains) {
+      const res = this.runCommandSafe(tc.cmd, tc.args);
+      if (res.available) {
+        const ver = res.output.trim().split(/\r?\n/)[0].trim();
+        checks.push({
+          id: tc.id,
+          name: tc.name,
+          category: "Toolchain",
+          status: "OK",
+          version: ver,
+          message: `${ver} active`,
+        });
+      }
     }
   }
 

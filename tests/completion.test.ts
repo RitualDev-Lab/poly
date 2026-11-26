@@ -40,7 +40,18 @@ test("Shell Auto-Completion - Dynamic Resolution", async (t) => {
 
   await t.test("resolves ecosystems for which command", () => {
     const ecosystems = resolveDynamicCompletions("which");
-    assert.deepEqual(ecosystems, ["npm", "jsr", "pypi", "conda", "cargo", "go"]);
+    assert.deepEqual(ecosystems, [
+      "npm",
+      "jsr",
+      "pypi",
+      "conda",
+      "cargo",
+      "go",
+      "nuget",
+      "composer",
+      "gem",
+      "pub",
+    ]);
   });
 
   await t.test("resolves all CLI command names", () => {

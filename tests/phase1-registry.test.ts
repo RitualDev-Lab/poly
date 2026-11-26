@@ -56,39 +56,39 @@ test("Detector - Glob matching handles *.csproj, *.rockspec, and *.cabal", () =>
   assert.equal(matchesManifestGlob("package.json", "*.csproj"), false);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "poly-phase1-glob-"));
-  const nugetAdapter = defineDeclarativeAdapter({
-    id: "dotnet-test",
-    ecosystem: "nuget",
-    purlTypes: ["nuget"],
-    manifests: ["*.csproj"],
-    lockfiles: ["packages.lock.json"],
+  const luarocksAdapter = defineDeclarativeAdapter({
+    id: "luarocks-test",
+    ecosystem: "luarocks",
+    purlTypes: ["luarocks"],
+    manifests: ["*.rockspec"],
+    lockfiles: ["luarocks.lock"],
     commands: {
-      command: "dotnet",
-      add: (pkg) => ["add", "package", pkg.name],
-      remove: (pkg) => ["remove", "package", pkg.name],
-      install: () => ["restore"],
-      update: (pkg) => ["add", "package", pkg?.name ?? ""],
+      command: "luarocks",
+      add: (pkg) => ["install", pkg.name],
+      remove: (pkg) => ["remove", pkg.name],
+      install: () => ["make"],
+      update: (pkg) => ["install", pkg?.name ?? ""],
     },
   });
 
   try {
-    engineRegistry.register(nugetAdapter);
-    fs.writeFileSync(path.join(tmpDir, "BillingService.csproj"), "<Project />");
+    engineRegistry.register(luarocksAdapter);
+    fs.writeFileSync(path.join(tmpDir, "awesome-1.0-1.rockspec"), "package = 'awesome'");
 
     const contexts = detectContexts(tmpDir);
     assert.equal(contexts.length, 1);
-    assert.equal(contexts[0].ecosystem, "nuget");
-    assert.equal(contexts[0].manifestFile, "BillingService.csproj");
+    assert.equal(contexts[0].ecosystem, "luarocks");
+    assert.equal(contexts[0].manifestFile, "awesome-1.0-1.rockspec");
 
-    const spec = parsePackageSpec("nuget:Newtonsoft.Json@13.0.3");
-    assert.equal(spec.ecosystem, "nuget");
-    const engine = engineRegistry.createEngine("nuget");
+    const spec = parsePackageSpec("luarocks:luasocket@3.1.0");
+    assert.equal(spec.ecosystem, "luarocks");
+    const engine = engineRegistry.createEngine("luarocks");
     assert.deepEqual(engine.resolveAddArgs(spec), {
-      command: "dotnet",
-      args: ["add", "package", "Newtonsoft.Json"],
+      command: "luarocks",
+      args: ["install", "luasocket"],
     });
   } finally {
-    engineRegistry.unregister("nuget");
+    engineRegistry.unregister("luarocks");
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

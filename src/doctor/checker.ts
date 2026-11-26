@@ -305,6 +305,62 @@ export class PolyDoctor {
         args: ["--version"],
         hint: "https://julialang.org/downloads/",
       },
+      {
+        id: "toolchain-maven",
+        name: "Apache Maven",
+        cmd: "mvn",
+        args: ["--version"],
+        hint: "https://maven.apache.org",
+      },
+      {
+        id: "toolchain-gradle",
+        name: "Gradle Build Tool",
+        cmd: "gradle",
+        args: ["--version"],
+        hint: "https://gradle.org",
+      },
+      {
+        id: "toolchain-sbt",
+        name: "Scala sbt",
+        cmd: "sbt",
+        args: ["--version"],
+        hint: "https://www.scala-sbt.org",
+      },
+      {
+        id: "toolchain-elixir",
+        name: "Elixir Mix",
+        cmd: "mix",
+        args: ["--version"],
+        hint: "https://elixir-lang.org",
+      },
+      {
+        id: "toolchain-rebar3",
+        name: "Erlang Rebar3",
+        cmd: "rebar3",
+        args: ["version"],
+        hint: "https://rebar3.org",
+      },
+      {
+        id: "toolchain-swift",
+        name: "Swift Package Manager",
+        cmd: "swift",
+        args: ["--version"],
+        hint: "https://www.swift.org",
+      },
+      {
+        id: "toolchain-cocoapods",
+        name: "CocoaPods",
+        cmd: "pod",
+        args: ["--version"],
+        hint: "https://cocoapods.org",
+      },
+      {
+        id: "toolchain-carthage",
+        name: "Carthage",
+        cmd: "carthage",
+        args: ["version"],
+        hint: "https://github.com/Carthage/Carthage",
+      },
     ];
 
     for (const tc of toolchains) {

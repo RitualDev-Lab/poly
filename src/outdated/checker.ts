@@ -2,7 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Ecosystem } from "../types.js";
 import { resolveWorkspaceMembers } from "../workspace/config.js";
-import { extractBackendMobileDependencies } from "../workspace/crypto.js";
+import {
+  extractBackendMobileDependencies,
+  extractTier2ManifestDependencies,
+} from "../workspace/crypto.js";
 import { compareSemver } from "./semver.js";
 import type { OutdatedDependency, OutdatedScanReport } from "./types.js";
 
@@ -250,6 +253,135 @@ async function fetchPubLatest(name: string): Promise<string | null> {
   }
 }
 
+async function fetchMavenLatest(name: string): Promise<string | null> {
+  const normalized = name.includes("/") ? name.replace("/", ":") : name;
+  const cacheKey = `maven:${normalized}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  const [groupId, artifactId] = normalized.split(":", 2);
+  if (!groupId || !artifactId) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const url = `https://search.maven.org/solrsearch/select?q=g:${encodeURIComponent(groupId)}+AND+a:${encodeURIComponent(artifactId)}&core=gav&rows=20&wt=json`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { response?: { docs?: Array<{ v?: string }> } };
+    const versions = (data.response?.docs ?? [])
+      .map((d) => d.v)
+      .filter((v): v is string => Boolean(v));
+    const latest =
+      versions.find((v) => !/-(?:alpha|beta|rc|m\d+|snapshot)/i.test(v)) ?? versions[0] ?? null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchHexLatest(name: string): Promise<string | null> {
+  const cacheKey = `hex:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://hex.pm/api/packages/${encodeURIComponent(name)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as {
+      releases?: Array<{ version?: string }>;
+      latest_stable_version?: string;
+    };
+    const latest =
+      data.latest_stable_version ??
+      data.releases?.find((r) => r.version && !r.version.includes("-"))?.version ??
+      data.releases?.[0]?.version ??
+      null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchCocoaPodsLatest(name: string): Promise<string | null> {
+  const cacheKey = `cocoapods:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://trunk.cocoapods.org/api/v1/pods/${encodeURIComponent(name)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { versions?: Array<{ name?: string }> };
+    const versions = (data.versions ?? [])
+      .map((v) => v.name)
+      .filter((v): v is string => Boolean(v));
+    const latest = versions[versions.length - 1] ?? null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchSwiftLatest(name: string): Promise<string | null> {
+  const stripped = name
+    .replace(/^https?:\/\//i, "")
+    .replace(/^github\.com\//i, "")
+    .replace(/\.git$/i, "");
+  const [owner, repo] = stripped.split("/", 2);
+  if (!owner || !repo) return null;
+
+  const cacheKey = `swift:${owner}/${repo}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/tags`, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "poly-cli/0.6.2 (developer@ritualdev.in)",
+      },
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const tags = (await res.json()) as Array<{ name?: string }>;
+    const tag = tags.find((t) => t.name && /^v?\d+\.\d+/.test(t.name))?.name ?? tags[0]?.name;
+    const latest = tag ? tag.replace(/^v/, "") : null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
 /**
  * Dispatches to registry fetcher based on ecosystem.
  */
@@ -274,6 +406,18 @@ export async function fetchLatestVersion(
       return fetchGemLatest(name);
     case "pub":
       return fetchPubLatest(name);
+    case "maven":
+    case "gradle":
+    case "sbt":
+      return fetchMavenLatest(name);
+    case "hex":
+    case "rebar3":
+      return fetchHexLatest(name);
+    case "cocoapods":
+      return fetchCocoaPodsLatest(name);
+    case "swift":
+    case "carthage":
+      return fetchSwiftLatest(name);
     default:
       return null;
   }
@@ -417,6 +561,25 @@ function extractDeclaredDependencies(
     case "gem":
     case "pub": {
       for (const item of extractBackendMobileDependencies(manifestPath, content, ecosystem)) {
+        if (item.version === "any" || item.version === "latest") continue;
+        deps.push({
+          name: item.name,
+          version: item.version,
+          ecosystem: item.ecosystem,
+          memberPath,
+        });
+      }
+      break;
+    }
+    case "maven":
+    case "gradle":
+    case "sbt":
+    case "hex":
+    case "rebar3":
+    case "swift":
+    case "cocoapods":
+    case "carthage": {
+      for (const item of extractTier2ManifestDependencies(manifestPath, content, ecosystem)) {
         if (item.version === "any" || item.version === "latest") continue;
         deps.push({
           name: item.name,

@@ -1,5 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { mutateCartfile, mutatePackageSwift, mutatePodfile } from "../engines/mutators/apple.js";
+import { mutateMixExs, mutateRebarConfig } from "../engines/mutators/elixir.js";
+import {
+  mutateGradleBuild,
+  mutateGradleCatalog,
+  mutateIvyXml,
+  mutatePomXml,
+  mutateSbtBuild,
+} from "../engines/mutators/jvm.js";
+import type { PackageSpec } from "../types.js";
 import { resolveWorkspaceMembers } from "../workspace/config.js";
 import { writeCompositeLockfile } from "../workspace/lockfile.js";
 import { scanOutdatedDependencies } from "./checker.js";
@@ -116,6 +126,38 @@ export function patchManifestVersion(
       fs.writeFileSync(manifestPath, updated, "utf-8");
       return true;
     }
+  }
+
+  // 4. Phase 4 Tier 2 manifests (JVM, Elixir/Erlang, Swift/Apple)
+  const cleanVer = newVersion.replace(/^[\^~><=v\s]+/, "");
+  const spec: PackageSpec = { raw: pkgName, name: pkgName, version: cleanVer };
+  let mutated = content;
+
+  if (manifestPath.endsWith("pom.xml")) {
+    mutated = mutatePomXml(content, "add", spec);
+  } else if (manifestPath.endsWith("ivy.xml")) {
+    mutated = mutateIvyXml(content, "add", spec);
+  } else if (manifestPath.endsWith("libs.versions.toml")) {
+    mutated = mutateGradleCatalog(content, "add", spec);
+  } else if (manifestPath.endsWith("build.gradle.kts") || manifestPath.endsWith("build.gradle")) {
+    mutated = mutateGradleBuild(content, "add", spec, manifestPath.endsWith(".kts"));
+  } else if (manifestPath.endsWith("build.sbt")) {
+    mutated = mutateSbtBuild(content, "add", spec);
+  } else if (manifestPath.endsWith("mix.exs")) {
+    mutated = mutateMixExs(content, "add", spec);
+  } else if (manifestPath.endsWith("rebar.config")) {
+    mutated = mutateRebarConfig(content, "add", spec);
+  } else if (manifestPath.endsWith("Package.swift")) {
+    mutated = mutatePackageSwift(content, "add", spec);
+  } else if (manifestPath.endsWith("Podfile")) {
+    mutated = mutatePodfile(content, "add", spec);
+  } else if (manifestPath.endsWith("Cartfile")) {
+    mutated = mutateCartfile(content, "add", spec);
+  }
+
+  if (mutated !== content) {
+    fs.writeFileSync(manifestPath, mutated, "utf-8");
+    return true;
   }
 
   return false;

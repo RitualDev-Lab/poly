@@ -55,6 +55,14 @@ test("Shell Auto-Completion - Dynamic Resolution", async (t) => {
       "vcpkg",
       "meson",
       "julia",
+      "maven",
+      "gradle",
+      "sbt",
+      "hex",
+      "rebar3",
+      "swift",
+      "cocoapods",
+      "carthage",
     ]);
   });
 

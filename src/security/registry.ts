@@ -314,6 +314,152 @@ export async function fetchRegistryMetadata(
       return meta;
     }
 
+    if (ecosystem === "maven" || ecosystem === "gradle" || ecosystem === "sbt") {
+      const normalized = packageName.includes("/") ? packageName.replace("/", ":") : packageName;
+      const [groupId, artifactId] = normalized.split(":", 2);
+      if (!groupId || !artifactId) {
+        clearTimeout(timer);
+        return null;
+      }
+      const url = `https://search.maven.org/solrsearch/select?q=g:${encodeURIComponent(groupId)}+AND+a:${encodeURIComponent(artifactId)}&core=gav&rows=20&wt=json`;
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        response?: { docs?: Array<{ v?: string; timestamp?: number }> };
+      };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      let latestVersion: string | undefined;
+      for (const doc of data.response?.docs ?? []) {
+        if (!doc.v) continue;
+        if (!latestVersion) latestVersion = doc.v;
+        versions[doc.v] = {
+          version: doc.v,
+          publishedAt: doc.timestamp ? new Date(doc.timestamp).toISOString() : undefined,
+          license: "APACHE-2.0",
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: normalized,
+        ecosystem,
+        latestVersion,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "hex" || ecosystem === "rebar3") {
+      const res = await fetch(`https://hex.pm/api/packages/${encodeURIComponent(packageName)}`, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        meta?: { licenses?: string[] };
+        latest_stable_version?: string;
+        releases?: Array<{ version?: string; inserted_at?: string }>;
+      };
+      const license = normalizeLicenseString(data.meta?.licenses?.[0]);
+      const versions: Record<string, PackageVersionMetadata> = {};
+      for (const rel of data.releases ?? []) {
+        if (!rel.version) continue;
+        versions[rel.version] = {
+          version: rel.version,
+          publishedAt: rel.inserted_at,
+          license,
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem,
+        latestVersion: data.latest_stable_version ?? data.releases?.[0]?.version,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "cocoapods") {
+      const res = await fetch(
+        `https://trunk.cocoapods.org/api/v1/pods/${encodeURIComponent(packageName)}`,
+        { signal: controller.signal, headers: { Accept: "application/json" } },
+      );
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        versions?: Array<{ name?: string; created_at?: string }>;
+      };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      let latestVersion: string | undefined;
+      for (const v of data.versions ?? []) {
+        if (!v.name) continue;
+        latestVersion = v.name;
+        versions[v.name] = {
+          version: v.name,
+          publishedAt: v.created_at,
+          license: "MIT",
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "cocoapods",
+        latestVersion,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "swift" || ecosystem === "carthage") {
+      const stripped = packageName
+        .replace(/^https?:\/\//i, "")
+        .replace(/^github\.com\//i, "")
+        .replace(/\.git$/i, "");
+      const [owner, repo] = stripped.split("/", 2);
+      if (!owner || !repo) {
+        clearTimeout(timer);
+        return null;
+      }
+      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/tags`, {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "poly-firewall/0.6.2 (developer@ritualdev.in)",
+        },
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const tags = (await res.json()) as Array<{ name?: string }>;
+      const versions: Record<string, PackageVersionMetadata> = {};
+      let latestVersion: string | undefined;
+      for (const t of tags) {
+        if (!t.name) continue;
+        const clean = t.name.replace(/^v/, "");
+        if (!latestVersion) latestVersion = clean;
+        versions[clean] = {
+          version: clean,
+          license: "UNKNOWN",
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem,
+        latestVersion,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
     clearTimeout(timer);
     return null;
   } catch {

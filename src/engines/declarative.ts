@@ -13,6 +13,18 @@ export interface DeclarativeCommandSpec {
   install: (ctx?: EngineContext) => string[];
   /** Formats dependency update command arguments. */
   update: (pkg?: PackageSpec, ctx?: EngineContext) => string[];
+  /** Optional Tier 2 manifest mutator executed prior to CLI add command. */
+  mutateAdd?: (
+    pkg: PackageSpec,
+    cwd: string,
+    ctx?: EngineContext,
+  ) => { manifestFile: string; changed: boolean } | null;
+  /** Optional Tier 2 manifest mutator executed prior to CLI remove command. */
+  mutateRemove?: (
+    pkg: PackageSpec,
+    cwd: string,
+    ctx?: EngineContext,
+  ) => { manifestFile: string; changed: boolean } | null;
 }
 
 export interface EngineAdapter {
@@ -91,6 +103,20 @@ export class DeclarativeEngine extends BaseEngine {
 
   resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] } {
     return { command: this.activeCommand, args: this.spec.update(pkg, this.ctx) };
+  }
+
+  override applyManifestAdd(
+    pkg: PackageSpec,
+    cwd: string,
+  ): { manifestFile: string; changed: boolean } | null {
+    return this.spec.mutateAdd ? this.spec.mutateAdd(pkg, cwd, this.ctx) : null;
+  }
+
+  override applyManifestRemove(
+    pkg: PackageSpec,
+    cwd: string,
+  ): { manifestFile: string; changed: boolean } | null {
+    return this.spec.mutateRemove ? this.spec.mutateRemove(pkg, cwd, this.ctx) : null;
   }
 }
 

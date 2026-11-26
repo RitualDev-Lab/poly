@@ -42,11 +42,13 @@ export class SbomGenerator {
     const components = packages.map((pkg) => {
       const purlEcosystem = engineRegistry.getSbomPurlType(pkg.ecosystem);
       const cleanVer = pkg.version.replace(/^[~^>=<\s]+/, "");
+      const purlName =
+        purlEcosystem === "maven" ? pkg.packageName.replace(":", "/") : pkg.packageName;
       return {
         type: "library",
         name: pkg.packageName,
         version: cleanVer,
-        purl: `pkg:${purlEcosystem}/${pkg.packageName}@${cleanVer}`,
+        purl: `pkg:${purlEcosystem}/${purlName}@${cleanVer}`,
         licenses: [
           {
             license: {
@@ -91,6 +93,8 @@ export class SbomGenerator {
     const spdxPackages = packages.map((pkg, idx) => {
       const safeId = pkg.packageName.replace(/[^a-zA-Z0-9]/g, "-");
       const purlEcosystem = engineRegistry.getSbomPurlType(pkg.ecosystem);
+      const purlName =
+        purlEcosystem === "maven" ? pkg.packageName.replace(":", "/") : pkg.packageName;
       return {
         name: pkg.packageName,
         SPDXID: `SPDXRef-Package-${safeId}-${idx}`,
@@ -104,7 +108,7 @@ export class SbomGenerator {
           {
             referenceCategory: "PACKAGE-MANAGER",
             referenceType: "purl",
-            referenceLocator: `pkg:${purlEcosystem}/${pkg.packageName}@${pkg.version.replace(/^[~^>=<]/, "")}`,
+            referenceLocator: `pkg:${purlEcosystem}/${purlName}@${pkg.version.replace(/^[~^>=<]/, "")}`,
           },
         ],
       };

@@ -47,6 +47,22 @@ export abstract class BaseEngine {
   abstract resolveUpdateArgs(pkg?: PackageSpec): { command: string; args: string[] };
 
   /**
+   * Optional manifest mutation hook executed before running add CLI commands (for Tier 2 ecosystems).
+   */
+  applyManifestAdd?(
+    pkg: PackageSpec,
+    cwd: string,
+  ): { manifestFile: string; changed: boolean } | null;
+
+  /**
+   * Optional manifest mutation hook executed before running remove CLI commands (for Tier 2 ecosystems).
+   */
+  applyManifestRemove?(
+    pkg: PackageSpec,
+    cwd: string,
+  ): { manifestFile: string; changed: boolean } | null;
+
+  /**
    * Executes a native command asynchronously with performance timing.
    */
   async execute(

@@ -13,7 +13,11 @@ export type BuiltinEcosystem =
   | "nuget"
   | "composer"
   | "gem"
-  | "pub";
+  | "pub"
+  | "conan"
+  | "vcpkg"
+  | "meson"
+  | "julia";
 export type Ecosystem = BuiltinEcosystem | (string & {});
 
 export interface EngineContext {

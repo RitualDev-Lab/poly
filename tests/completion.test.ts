@@ -51,6 +51,10 @@ test("Shell Auto-Completion - Dynamic Resolution", async (t) => {
       "composer",
       "gem",
       "pub",
+      "conan",
+      "vcpkg",
+      "meson",
+      "julia",
     ]);
   });
 

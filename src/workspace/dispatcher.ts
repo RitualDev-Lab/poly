@@ -1,4 +1,4 @@
-import { GoEngine, NodeEngine, PythonEngine, RustEngine } from "../engines/index.js";
+import { engineRegistry } from "../engines/index.js";
 import { RegistryRouter } from "../registry/index.js";
 import type { Ecosystem, ExecutionResult } from "../types.js";
 import { loadWorkspaceConfig, resolveWorkspaceMembers } from "./config.js";
@@ -45,7 +45,12 @@ export class WorkspaceDispatcher {
         const member = queue.shift();
         if (!member) break;
         const workerPromise = (async () => {
-          const engine = this.getEngine(member.context.ecosystem, member.context.lockfile);
+          const engine = this.getEngine(
+            member.context.ecosystem,
+            member.context.manifestFile,
+            member.context.lockfile,
+            member.absoluteDir,
+          );
           const { command, args } = engine.resolveInstallArgs();
           const routedArgs = this.registryRouter.injectCliFlags(
             member.context.ecosystem,
@@ -83,16 +88,7 @@ export class WorkspaceDispatcher {
     return results;
   }
 
-  private getEngine(ecosystem: Ecosystem, lockfile?: string) {
-    switch (ecosystem) {
-      case "npm":
-        return new NodeEngine(lockfile);
-      case "pypi":
-        return new PythonEngine(lockfile);
-      case "cargo":
-        return new RustEngine();
-      case "go":
-        return new GoEngine();
-    }
+  private getEngine(ecosystem: Ecosystem, manifest?: string, lockfile?: string, cwd?: string) {
+    return engineRegistry.createEngine(ecosystem, { ecosystem, manifest, lockfile, cwd });
   }
 }

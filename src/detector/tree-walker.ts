@@ -1,39 +1,55 @@
 import fs from "node:fs";
 import path from "node:path";
+import { engineRegistry } from "../engines/registry.js";
 import type { Ecosystem, ManifestContext } from "../types.js";
 
-interface EcosystemRule {
-  ecosystem: Ecosystem;
-  manifests: string[];
-  lockfiles: string[];
+/**
+ * Matches a single filename against an exact pattern or simple wildcard glob (e.g. *.csproj, *.rockspec, *.cabal).
+ */
+export function matchesManifestGlob(filename: string, pattern: string): boolean {
+  if (!pattern.includes("*") && !pattern.includes("?")) {
+    return filename === pattern;
+  }
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
+  return new RegExp(`^${escaped}$`, "i").test(filename);
 }
 
-const ECOSYSTEM_RULES: EcosystemRule[] = [
-  {
-    ecosystem: "npm",
-    manifests: ["package.json"],
-    lockfiles: ["pnpm-lock.yaml", "bun.lockb", "bun.lock", "yarn.lock", "package-lock.json"],
-  },
-  {
-    ecosystem: "pypi",
-    manifests: ["pyproject.toml", "requirements.txt", "Pipfile", "setup.py"],
-    lockfiles: ["uv.lock", "poetry.lock", "Pipfile.lock"],
-  },
-  {
-    ecosystem: "cargo",
-    manifests: ["Cargo.toml"],
-    lockfiles: ["Cargo.lock"],
-  },
-  {
-    ecosystem: "go",
-    manifests: ["go.mod"],
-    lockfiles: ["go.sum"],
-  },
-];
+function findMatchingManifest(
+  dir: string,
+  patterns: readonly string[],
+  cachedEntries?: string[],
+): { matched?: string; entries?: string[] } {
+  let entries = cachedEntries;
+
+  for (const pattern of patterns) {
+    if (!pattern.includes("*") && !pattern.includes("?")) {
+      if (fs.existsSync(path.join(dir, pattern))) {
+        return { matched: pattern, entries };
+      }
+    } else {
+      if (!entries) {
+        try {
+          entries = fs.readdirSync(dir).sort();
+        } catch {
+          entries = [];
+        }
+      }
+      const hit = entries.find((entry) => matchesManifestGlob(entry, pattern));
+      if (hit) {
+        return { matched: hit, entries };
+      }
+    }
+  }
+
+  return { matched: undefined, entries };
+}
 
 /**
  * Traverses upwards from the start directory up to the git root or system root,
- * collecting all project manifests and computing proximity scores.
+ * collecting all project manifests via EngineRegistry and computing proximity scores.
  */
 export function detectContexts(startDir: string): ManifestContext[] {
   let current = path.resolve(startDir);
@@ -42,34 +58,38 @@ export function detectContexts(startDir: string): ManifestContext[] {
   const visitedEcosystems = new Set<Ecosystem>();
 
   while (true) {
-    for (const rule of ECOSYSTEM_RULES) {
-      if (visitedEcosystems.has(rule.ecosystem)) {
+    let dirEntriesCache: string[] | undefined;
+
+    for (const adapter of engineRegistry.getAdapters()) {
+      if (visitedEcosystems.has(adapter.ecosystem)) {
         continue;
       }
 
-      for (const manifest of rule.manifests) {
-        const manifestPath = path.join(current, manifest);
-        if (fs.existsSync(manifestPath)) {
-          let foundLockfile: string | undefined;
-          for (const lockfile of rule.lockfiles) {
-            const lockPath = path.join(current, lockfile);
-            if (fs.existsSync(lockPath)) {
-              foundLockfile = lockfile;
-              break;
-            }
+      const { matched: matchedManifest, entries } = findMatchingManifest(
+        current,
+        adapter.manifests,
+        dirEntriesCache,
+      );
+      dirEntriesCache = entries;
+
+      if (matchedManifest) {
+        let foundLockfile: string | undefined;
+        for (const lockfile of adapter.lockfiles) {
+          if (fs.existsSync(path.join(current, lockfile))) {
+            foundLockfile = lockfile;
+            break;
           }
-
-          contexts.push({
-            directory: current,
-            ecosystem: rule.ecosystem,
-            manifestFile: manifest,
-            lockfile: foundLockfile,
-            distance,
-          });
-
-          visitedEcosystems.add(rule.ecosystem);
-          break;
         }
+
+        contexts.push({
+          directory: current,
+          ecosystem: adapter.ecosystem,
+          manifestFile: matchedManifest,
+          lockfile: foundLockfile,
+          distance,
+        });
+
+        visitedEcosystems.add(adapter.ecosystem);
       }
     }
 

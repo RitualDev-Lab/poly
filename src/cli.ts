@@ -29,6 +29,7 @@ import { detectContexts, resolvePrimaryContext } from "./detector/index.js";
 import { PolyDispatcher } from "./dispatcher/index.js";
 import { DockerGenerator } from "./docker/index.js";
 import { PolyDoctor } from "./doctor/index.js";
+import { engineRegistry } from "./engines/registry.js";
 import {
   PolyMcpServer,
   generateMcpConfig,
@@ -89,7 +90,7 @@ COMMANDS:
   mcp [install]       Start stdio MCP server or 1-click install for Claude Desktop, Cursor, Windsurf
   init [--ide]        Initialize workspace or generate AI agent guidelines (.cursorrules, CLAUDE.md)
   completion <shell>  Generate native shell tab auto-completion (bash, zsh, fish, powershell)
-  which <ecosystem>   Show active CLI binary for an ecosystem (npm, pypi, cargo, go)
+  which <ecosystem>   Show active CLI binary for an ecosystem (npm, jsr, pypi, conda, cargo, go)
 
 OPTIONS:
   -D, --dev           Install as a development dependency
@@ -1064,13 +1065,18 @@ async function main(): Promise<void> {
 
       case "which": {
         const ecosystem = positionalArgs[0]?.toLowerCase() as Ecosystem;
-        if (!ecosystem || !["npm", "pypi", "cargo", "go"].includes(ecosystem)) {
-          logError("Please specify a valid ecosystem: 'npm', 'pypi', 'cargo', or 'go'");
+        const resolved = ecosystem ? engineRegistry.resolveEcosystem(ecosystem) : undefined;
+        if (!resolved) {
+          const supported = engineRegistry
+            .listEcosystems()
+            .map((e) => `'${e}'`)
+            .join(", ");
+          logError(`Please specify a valid ecosystem: ${supported}`);
           process.exit(1);
         }
 
         const dispatcher = new PolyDispatcher();
-        const info = dispatcher.which(ecosystem, cwd);
+        const info = dispatcher.which(resolved, cwd);
         if (isJson) {
           console.log(JSON.stringify({ ecosystem, ...info }, null, 2));
         } else {

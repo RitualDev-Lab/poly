@@ -6,6 +6,13 @@ export abstract class BaseEngine {
   abstract readonly ecosystem: string;
 
   /**
+   * Returns the effective CLI executable resolved for this engine instance.
+   */
+  getEffectiveCli(): string {
+    return this.name;
+  }
+
+  /**
    * Checks if an executable command is available in the current PATH.
    */
   protected isCommandAvailable(command: string): boolean {

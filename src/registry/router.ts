@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { engineRegistry } from "../engines/registry.js";
 import type { Ecosystem } from "../types.js";
 import type { CorporateRegistryConfig, RegistryEndpoint } from "./types.js";
 
@@ -23,15 +24,19 @@ export class RegistryRouter {
     if (process.env.POLY_GO_PROXY && process.env.POLY_GO_PROXY !== "undefined") {
       config.go = { url: process.env.POLY_GO_PROXY };
     }
+    if (process.env.POLY_CONDA_CHANNELS && process.env.POLY_CONDA_CHANNELS !== "undefined") {
+      config.conda = { url: process.env.POLY_CONDA_CHANNELS };
+    }
 
-    // 2. Read poly.toml [registries] section
+    // 2. Read poly.toml [registries.<ecosystem>] section
     const tomlPath = path.join(workspaceDir, "poly.toml");
     if (fs.existsSync(tomlPath)) {
       const parsed = this.parseRegistriesFromToml(fs.readFileSync(tomlPath, "utf-8"));
-      if (parsed.npm && !config.npm) config.npm = parsed.npm;
-      if (parsed.pypi && !config.pypi) config.pypi = parsed.pypi;
-      if (parsed.cargo && !config.cargo) config.cargo = parsed.cargo;
-      if (parsed.go && !config.go) config.go = parsed.go;
+      for (const [eco, endpoint] of Object.entries(parsed)) {
+        if (endpoint && !config[eco]) {
+          config[eco] = endpoint;
+        }
+      }
     }
 
     return config;
@@ -47,43 +52,11 @@ export class RegistryRouter {
   ): NodeJS.ProcessEnv {
     const registries = this.loadRegistryConfig(workspaceDir);
     const env = { ...existingEnv };
+    const endpoint = registries[ecosystem];
+    const adapter = engineRegistry.getAdapter(ecosystem);
 
-    switch (ecosystem) {
-      case "npm": {
-        if (registries.npm?.url) {
-          env.NPM_CONFIG_REGISTRY = registries.npm.url;
-          env.npm_config_registry = registries.npm.url;
-        }
-        if (registries.npm?.caFile) {
-          env.NPM_CONFIG_CAFILE = registries.npm.caFile;
-        }
-        break;
-      }
-
-      case "pypi": {
-        if (registries.pypi?.url) {
-          env.UV_INDEX_URL = registries.pypi.url;
-          env.PIP_INDEX_URL = registries.pypi.url;
-        }
-        if (registries.pypi?.trustedHost) {
-          env.PIP_TRUSTED_HOST = registries.pypi.trustedHost;
-        }
-        break;
-      }
-
-      case "go": {
-        if (registries.go?.url) {
-          env.GOPROXY = registries.go.url;
-        }
-        break;
-      }
-
-      case "cargo": {
-        if (registries.cargo?.url) {
-          env.CARGO_REGISTRIES_CRATES_IO_INDEX = registries.cargo.url;
-        }
-        break;
-      }
+    if (endpoint && adapter?.injectRegistryEnv) {
+      adapter.injectRegistryEnv(endpoint, env);
     }
 
     return env;
@@ -95,21 +68,11 @@ export class RegistryRouter {
   injectCliFlags(ecosystem: Ecosystem, baseArgs: string[], workspaceDir: string): string[] {
     const registries = this.loadRegistryConfig(workspaceDir);
     const args = [...baseArgs];
+    const endpoint = registries[ecosystem];
+    const adapter = engineRegistry.getAdapter(ecosystem);
 
-    switch (ecosystem) {
-      case "npm": {
-        if (registries.npm?.url && !args.includes("--registry")) {
-          args.push("--registry", registries.npm.url);
-        }
-        break;
-      }
-
-      case "pypi": {
-        if (registries.pypi?.url && !args.includes("--index-url")) {
-          args.push("--index-url", registries.pypi.url);
-        }
-        break;
-      }
+    if (endpoint && adapter?.injectRegistryFlags) {
+      adapter.injectRegistryFlags(endpoint, args);
     }
 
     return args;
@@ -124,11 +87,14 @@ export class RegistryRouter {
       const line = raw.trim();
       if (!line || line.startsWith("#")) continue;
 
-      if (line === "[registries.npm]") currentEco = "npm";
-      else if (line === "[registries.pypi]") currentEco = "pypi";
-      else if (line === "[registries.cargo]") currentEco = "cargo";
-      else if (line === "[registries.go]") currentEco = "go";
-      else if (line.startsWith("[")) currentEco = undefined;
+      const regHeader = line.match(/^\[registries\.([a-z0-9_-]+)\]$/i);
+      if (regHeader) {
+        currentEco = engineRegistry.resolveEcosystem(regHeader[1]) ?? regHeader[1].toLowerCase();
+        continue;
+      }
+      if (line.startsWith("[")) {
+        currentEco = undefined;
+      }
 
       if (!currentEco) continue;
 

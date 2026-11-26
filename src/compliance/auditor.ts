@@ -62,8 +62,8 @@ export class CrossStackAuditor {
     if (lock) {
       for (const member of lock.members) {
         for (const depStr of member.directDependencies) {
-          // format: "npm:axios@^1.7.0" or "pypi:fastapi@>=0.110.0"
-          const match = depStr.match(/^([a-z]+):(.*)$/);
+          // format: "npm:axios@^1.7.0", "jsr:@std/path@^1.0.0", "conda:numpy@1.26.4"
+          const match = depStr.match(/^([a-z0-9_-]+):(.*)$/);
           if (match) {
             const ecosystem = match[1] as Ecosystem;
             const rest = match[2];

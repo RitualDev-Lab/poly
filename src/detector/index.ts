@@ -1,1 +1,1 @@
-export { detectContexts, resolvePrimaryContext } from "./tree-walker.js";
+export { detectContexts, matchesManifestGlob, resolvePrimaryContext } from "./tree-walker.js";

@@ -3,7 +3,16 @@
  * Universal Package & Dependency Orchestration Specification
  */
 
-export type Ecosystem = "npm" | "pypi" | "cargo" | "go";
+export type BuiltinEcosystem = "npm" | "jsr" | "pypi" | "conda" | "cargo" | "go";
+export type Ecosystem = BuiltinEcosystem | (string & {});
+
+export interface EngineContext {
+  cwd?: string;
+  manifest?: string;
+  lockfile?: string;
+  ecosystem?: Ecosystem;
+  preferredCli?: string;
+}
 
 export interface PackageSpec {
   raw: string;
@@ -66,7 +75,10 @@ export interface WorkspaceConfig {
     node?: string;
     rust?: string;
     go?: string;
+    deno?: string;
+    conda?: string;
     concurrency?: number;
+    [key: string]: string | number | undefined;
   };
   tasks?: Record<string, TaskDefinition | string>;
   scripts?: Record<string, TaskDefinition | string>;

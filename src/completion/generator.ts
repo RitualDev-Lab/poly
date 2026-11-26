@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { engineRegistry } from "../engines/registry.js";
 import { loadWorkspaceConfig, resolveWorkspaceMembers } from "../workspace/config.js";
 import type { CommandDefinition, SupportedShell } from "./types.js";
 
@@ -185,7 +186,7 @@ export function resolveDynamicCompletions(type: string, cwd: string = process.cw
 
     case "which":
     case "ecosystems":
-      return ["npm", "pypi", "cargo", "go"];
+      return engineRegistry.listEcosystems();
 
     case "shells":
       return ["bash", "zsh", "fish", "powershell"];
@@ -303,7 +304,7 @@ ${zshEntries}
                     _values 'shell' bash zsh fish powershell
                     ;;
                 which)
-                    _values 'ecosystem' npm pypi cargo go
+                    _values 'ecosystem' ${engineRegistry.listEcosystems().join(" ")}
                     ;;
                 run)
                     local -a tasks
@@ -386,7 +387,10 @@ ${psEntries}
                 ForEach-Object { [System.Management.Automation.CompletionResult]::new(\$_, \$_, "ParameterValue", "\$_ shell completion") }
         }
         "which" {
-            @("npm", "pypi", "cargo", "go") |
+            @(${engineRegistry
+              .listEcosystems()
+              .map((e) => `"${e}"`)
+              .join(", ")}) |
                 Where-Object { \$_ -like "\$wordToComplete*" } |
                 ForEach-Object { [System.Management.Automation.CompletionResult]::new(\$_, \$_, "ParameterValue", "Ecosystem package manager") }
         }

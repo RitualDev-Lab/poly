@@ -24,6 +24,17 @@ test("PURL Parser - Shorthand Ecosystem Prefixes", () => {
   assert.equal(goPkg.ecosystem, "go");
   assert.equal(goPkg.name, "github.com/gin-gonic/gin");
   assert.equal(goPkg.version, "v1.9.1");
+
+  const jsrPkg = parsePackageSpec("jsr:@std/path@^1.0.0");
+  assert.equal(jsrPkg.ecosystem, "jsr");
+  assert.equal(jsrPkg.namespace, "@std");
+  assert.equal(jsrPkg.name, "path");
+  assert.equal(jsrPkg.version, "^1.0.0");
+
+  const condaPkg = parsePackageSpec("conda:numpy@1.26.4");
+  assert.equal(condaPkg.ecosystem, "conda");
+  assert.equal(condaPkg.name, "numpy");
+  assert.equal(condaPkg.version, "1.26.4");
 });
 
 test("PURL Parser - Scoped Packages (@namespace/name)", () => {
@@ -45,6 +56,17 @@ test("PURL Parser - Standard RFC Package URLs", () => {
   assert.equal(stdPypi.ecosystem, "pypi");
   assert.equal(stdPypi.name, "requests");
   assert.equal(stdPypi.version, "2.31.0");
+
+  const stdJsr = parsePackageSpec("pkg:jsr/%40std/path@1.0.8");
+  assert.equal(stdJsr.ecosystem, "jsr");
+  assert.equal(stdJsr.namespace, "@std");
+  assert.equal(stdJsr.name, "path");
+  assert.equal(stdJsr.version, "1.0.8");
+
+  const stdConda = parsePackageSpec("pkg:conda/numpy@1.26.4");
+  assert.equal(stdConda.ecosystem, "conda");
+  assert.equal(stdConda.name, "numpy");
+  assert.equal(stdConda.version, "1.26.4");
 });
 
 test("PURL Parser - Bare Package Names (No prefix)", () => {

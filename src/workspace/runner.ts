@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { engineRegistry } from "../engines/registry.js";
 import { type AffectedResult, resolveAffectedMembers } from "./affected.js";
 import { type ResolvedMember, loadWorkspaceConfig, resolveWorkspaceMembers } from "./config.js";
 
@@ -456,29 +457,10 @@ export class WorkspaceRunner {
   }
 
   private resolveScriptCommand(ecosystem: string, script: string): [string, string[]] {
-    switch (ecosystem) {
-      case "npm":
-        return ["npm", ["run", script]];
-      case "pypi":
-        return ["python", ["-m", script]];
-      case "cargo":
-        if (script === "dev" || script === "start") {
-          return ["cargo", ["run"]];
-        }
-        if (script === "test") {
-          return ["cargo", ["test"]];
-        }
-        return ["cargo", [script]];
-      case "go":
-        if (script === "dev" || script === "start") {
-          return ["go", ["run", "."]];
-        }
-        if (script === "test") {
-          return ["go", ["test", "./..."]];
-        }
-        return ["go", [script]];
-      default:
-        return [script, []];
+    const adapter = engineRegistry.getAdapter(ecosystem);
+    if (adapter?.resolveScriptCommand) {
+      return adapter.resolveScriptCommand(script);
     }
+    return [script, []];
   }
 }

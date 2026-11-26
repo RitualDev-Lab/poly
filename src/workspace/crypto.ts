@@ -46,9 +46,59 @@ export function extractDirectDependencies(manifestPath: string, ecosystem: Ecosy
       break;
     }
 
+    case "jsr": {
+      // Parse deno.json / deno.jsonc imports map (jsr:@std/path@^1.0.0, npm:zod@^3.22.0)
+      try {
+        const cleanJson = content.replace(/^\s*\/\/.*$/gm, "");
+        const parsed = JSON.parse(cleanJson) as { imports?: Record<string, string> };
+        for (const target of Object.values(parsed.imports ?? {})) {
+          if (
+            typeof target === "string" &&
+            (target.startsWith("jsr:") || target.startsWith("npm:"))
+          ) {
+            deps.push(target);
+          }
+        }
+      } catch {
+        // Ignore malformed deno.json/jsonc
+      }
+      break;
+    }
+
     case "pypi": {
-      // Parse dependencies = [ "fastapi>=0.110.0", ... ] in pyproject.toml or requirements.txt
+      const fileName = path.basename(manifestPath);
       const lines = content.split("\n");
+
+      if (fileName === "Pipfile") {
+        let inPackages = false;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed === "[packages]" || trimmed === "[dev-packages]") {
+            inPackages = true;
+            continue;
+          }
+          if (trimmed.startsWith("[")) {
+            inPackages = false;
+            continue;
+          }
+          if (inPackages && trimmed && !trimmed.startsWith("#")) {
+            const eqIdx = trimmed.indexOf("=");
+            if (eqIdx !== -1) {
+              const name = trimmed.substring(0, eqIdx).trim().replace(/["']/g, "");
+              const rawVer = trimmed
+                .substring(eqIdx + 1)
+                .trim()
+                .replace(/["']/g, "");
+              if (name) {
+                deps.push(rawVer && rawVer !== "*" ? `pypi:${name}${rawVer}` : `pypi:${name}`);
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      // Parse dependencies = [ "fastapi>=0.110.0", ... ] in pyproject.toml or requirements.txt
       let inDepsSection = false;
 
       for (const line of lines) {
@@ -66,12 +116,54 @@ export function extractDirectDependencies(manifestPath: string, ecosystem: Ecosy
           if (clean && !clean.startsWith("#")) {
             deps.push(`pypi:${clean}`);
           }
-        } else if (
-          path.basename(manifestPath) === "requirements.txt" &&
-          trimmed &&
-          !trimmed.startsWith("#")
-        ) {
+        } else if (fileName === "requirements.txt" && trimmed && !trimmed.startsWith("#")) {
           deps.push(`pypi:${trimmed}`);
+        }
+      }
+      break;
+    }
+
+    case "conda": {
+      // Parse environment.yml dependencies: (- numpy=1.26.4, nested pip: items)
+      const lines = content.split("\n");
+      let inDeps = false;
+      let inPip = false;
+
+      for (const rawLine of lines) {
+        const trimmed = rawLine.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+
+        if (trimmed === "dependencies:") {
+          inDeps = true;
+          inPip = false;
+          continue;
+        }
+        if (
+          inDeps &&
+          !rawLine.startsWith(" ") &&
+          !rawLine.startsWith("-") &&
+          trimmed.endsWith(":")
+        ) {
+          inDeps = false;
+          inPip = false;
+          continue;
+        }
+        if (!inDeps) continue;
+
+        if (trimmed === "- pip:" || trimmed === "pip:") {
+          inPip = true;
+          continue;
+        }
+        if (trimmed.startsWith("- ")) {
+          const item = trimmed.slice(2).trim().replace(/["']/g, "");
+          if (!item) continue;
+          const indent = rawLine.search(/\S|$/);
+          if (inPip && indent >= 4) {
+            deps.push(`pypi:${item}`);
+          } else {
+            inPip = false;
+            deps.push(`conda:${item}`);
+          }
         }
       }
       break;

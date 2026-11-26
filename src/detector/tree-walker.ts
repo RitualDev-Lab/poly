@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { syncCustomEnginesInDir } from "../engines/custom.js";
 import { engineRegistry } from "../engines/registry.js";
 import type { Ecosystem, ManifestContext } from "../types.js";
 
@@ -58,6 +59,7 @@ export function detectContexts(startDir: string): ManifestContext[] {
   const visitedEcosystems = new Set<Ecosystem>();
 
   while (true) {
+    syncCustomEnginesInDir(current);
     let dirEntriesCache: string[] | undefined;
 
     for (const adapter of engineRegistry.getAdapters()) {

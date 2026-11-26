@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { detectContexts } from "../detector/tree-walker.js";
+import { parseCustomEnginesFromToml, registerCustomEnginesFromConfig } from "../engines/custom.js";
 import type { ManifestContext, WorkspaceConfig } from "../types.js";
 
 export interface ResolvedMember {
@@ -19,14 +20,18 @@ export function loadWorkspaceConfig(workspaceDir: string): WorkspaceConfig | und
   if (fs.existsSync(jsonPath)) {
     try {
       const content = fs.readFileSync(jsonPath, "utf-8");
-      return JSON.parse(content) as WorkspaceConfig;
+      const parsed = JSON.parse(content) as WorkspaceConfig;
+      registerCustomEnginesFromConfig(parsed);
+      return parsed;
     } catch {
       // Ignore parse failure
     }
   }
 
   if (fs.existsSync(tomlPath)) {
-    return parseSimplePolyToml(fs.readFileSync(tomlPath, "utf-8"));
+    const parsed = parseSimplePolyToml(fs.readFileSync(tomlPath, "utf-8"));
+    registerCustomEnginesFromConfig(parsed);
+    return parsed;
   }
 
   return undefined;
@@ -120,6 +125,12 @@ export function parseSimplePolyToml(content: string): WorkspaceConfig {
         if (matches) config.security.licenses.denied = matches.map((m) => m.replace(/["']/g, ""));
       }
     }
+  }
+
+  const customEngines = parseCustomEnginesFromToml(content);
+  if (Object.keys(customEngines).length > 0) {
+    config.engines ??= {};
+    config.engines.custom = customEngines;
   }
 
   return config;

@@ -4,6 +4,7 @@ import type { Ecosystem } from "../types.js";
 import { resolveWorkspaceMembers } from "../workspace/config.js";
 import {
   extractBackendMobileDependencies,
+  extractLongTailDependencies,
   extractTier2ManifestDependencies,
 } from "../workspace/crypto.js";
 import { compareSemver } from "./semver.js";
@@ -382,6 +383,113 @@ async function fetchSwiftLatest(name: string): Promise<string | null> {
   }
 }
 
+async function fetchHackageLatest(name: string): Promise<string | null> {
+  const cacheKey = `hackage:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(
+      `https://hackage.haskell.org/package/${encodeURIComponent(name)}/preferred.json`,
+      {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      },
+    );
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { "normal-version"?: string[] };
+    const versions = data["normal-version"] ?? [];
+    const latest = versions[0] ?? null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchCranLatest(name: string): Promise<string | null> {
+  const cacheKey = `cran:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://crandb.r-pkg.org/${encodeURIComponent(name)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { Version?: string };
+    const latest = data.Version || null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchCpanLatest(name: string): Promise<string | null> {
+  const dist = name.replace(/::/g, "-");
+  const cacheKey = `cpan:${dist}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://fastapi.metacpan.org/v1/release/${encodeURIComponent(dist)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { version?: string };
+    const latest = data.version ? String(data.version).replace(/^v/, "") : null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchLuaRocksLatest(name: string): Promise<string | null> {
+  const cacheKey = `luarocks:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(
+      `https://luarocks.org/modules/luarocks/${encodeURIComponent(name)}.json`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { version?: string; versions?: Array<{ version?: string }> };
+    const latest = data.version ?? data.versions?.[0]?.version ?? null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
 /**
  * Dispatches to registry fetcher based on ecosystem.
  */
@@ -418,6 +526,14 @@ export async function fetchLatestVersion(
     case "swift":
     case "carthage":
       return fetchSwiftLatest(name);
+    case "hackage":
+      return fetchHackageLatest(name);
+    case "cran":
+      return fetchCranLatest(name);
+    case "cpan":
+      return fetchCpanLatest(name);
+    case "luarocks":
+      return fetchLuaRocksLatest(name);
     default:
       return null;
   }
@@ -580,6 +696,21 @@ function extractDeclaredDependencies(
     case "cocoapods":
     case "carthage": {
       for (const item of extractTier2ManifestDependencies(manifestPath, content, ecosystem)) {
+        if (item.version === "any" || item.version === "latest") continue;
+        deps.push({
+          name: item.name,
+          version: item.version,
+          ecosystem: item.ecosystem,
+          memberPath,
+        });
+      }
+      break;
+    }
+    case "hackage":
+    case "cran":
+    case "cpan":
+    case "luarocks": {
+      for (const item of extractLongTailDependencies(manifestPath, content, ecosystem)) {
         if (item.version === "any" || item.version === "latest") continue;
         deps.push({
           name: item.name,

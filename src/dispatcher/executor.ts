@@ -1,5 +1,6 @@
 import { detectContexts, resolvePrimaryContext } from "../detector/tree-walker.js";
-import { type BaseEngine, engineRegistry } from "../engines/index.js";
+import type { BaseEngine } from "../engines/base.js";
+import { engineRegistry } from "../engines/registry.js";
 import { parsePackageSpec } from "../purl/parser.js";
 import { RegistryRouter } from "../registry/index.js";
 import { evaluateSandboxGate, injectSandboxFlags } from "../sandbox/index.js";
@@ -62,7 +63,9 @@ export class PolyDispatcher {
       }
     }
 
-    // 3. Select native engine
+    // 3. Select native engine (lazy-loading only the needed ecosystem adapter)
+    await engineRegistry.ensureLoaded(pkg.ecosystem);
+    await engineRegistry.ensureLoaded(pkg.ecosystem);
     const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
     const { command, args } = engine.resolveAddArgs(pkg);
     const routedArgs = this.registryRouter.injectCliFlags(pkg.ecosystem, args, cwd);
@@ -107,6 +110,7 @@ export class PolyDispatcher {
       pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd);
     }
 
+    await engineRegistry.ensureLoaded(pkg.ecosystem);
     const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
     const mutation = engine.applyManifestRemove?.(pkg, cwd);
     if (mutation?.changed && !options?.silent && !options?.agent) {
@@ -141,6 +145,7 @@ export class PolyDispatcher {
 
       const results: ExecutionResult[] = [];
       for (const ctx of allContexts) {
+        await engineRegistry.ensureLoaded(ctx.ecosystem);
         const engine = this.getEngineForEcosystem(ctx.ecosystem, ctx.directory);
         const { command, args } = engine.resolveInstallArgs();
         const routedArgs = this.registryRouter.injectCliFlags(ctx.ecosystem, args, ctx.directory);
@@ -176,6 +181,7 @@ export class PolyDispatcher {
       throw new Error(`No project manifests found in '${cwd}' or parent directories.`);
     }
 
+    await engineRegistry.ensureLoaded(targetEcosystem);
     const engine = this.getEngineForEcosystem(targetEcosystem, cwd);
     const { command, args } = engine.resolveInstallArgs();
     const routedArgs = this.registryRouter.injectCliFlags(targetEcosystem, args, cwd);
@@ -209,6 +215,7 @@ export class PolyDispatcher {
         pkg.ecosystem = await this.resolveEcosystemForPackage(pkg.name, cwd, options?.agent);
       }
 
+      await engineRegistry.ensureLoaded(pkg.ecosystem);
       const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
       const { command, args } = engine.resolveUpdateArgs(pkg);
       const routedArgs = this.registryRouter.injectCliFlags(pkg.ecosystem, args, cwd);
@@ -243,6 +250,7 @@ export class PolyDispatcher {
 
       const results: ExecutionResult[] = [];
       for (const ctx of allContexts) {
+        await engineRegistry.ensureLoaded(ctx.ecosystem);
         const engine = this.getEngineForEcosystem(ctx.ecosystem, ctx.directory);
         const { command, args } = engine.resolveUpdateArgs();
         const routedArgs = this.registryRouter.injectCliFlags(ctx.ecosystem, args, ctx.directory);
@@ -278,6 +286,7 @@ export class PolyDispatcher {
       throw new Error(`No project manifests found in '${cwd}' or parent directories.`);
     }
 
+    await engineRegistry.ensureLoaded(targetEcosystem);
     const engine = this.getEngineForEcosystem(targetEcosystem, cwd);
     const { command, args } = engine.resolveUpdateArgs();
     const routedArgs = this.registryRouter.injectCliFlags(targetEcosystem, args, cwd);
@@ -302,6 +311,12 @@ export class PolyDispatcher {
    * Inspects which CLI tool powers an ecosystem
    */
   which(ecosystem: Ecosystem, cwd?: string): { engine: string; effectiveCli: string } {
+    if (!engineRegistry.isAdapterLoaded(ecosystem)) {
+      const meta = engineRegistry.getAdapter(ecosystem);
+      if (meta) {
+        return { engine: meta.id, effectiveCli: meta.defaultCli };
+      }
+    }
     const engine = this.getEngineForEcosystem(ecosystem, cwd ?? process.cwd());
     return { engine: engine.name, effectiveCli: engine.getEffectiveCli() };
   }

@@ -359,6 +359,15 @@ export function extractDirectDependencies(manifestPath: string, ecosystem: Ecosy
       }
       break;
     }
+    case "hackage":
+    case "cran":
+    case "cpan":
+    case "luarocks": {
+      for (const item of extractLongTailDependencies(manifestPath, content, ecosystem)) {
+        deps.push(`${item.ecosystem}:${item.name}@${item.version}`);
+      }
+      break;
+    }
   }
 
   return deps.sort();
@@ -649,4 +658,157 @@ function extractCppJuliaDependencies(
     results.push({ ecosystem, name, version: compatVersions.get(name) ?? "*" });
   }
   return results;
+}
+
+/**
+ * Extracts dependency name/version pairs for Phase 5 long-tail ecosystems
+ * (Haskell Cabal/Stack, R DESCRIPTION/renv.lock, Perl cpanfile, Lua .rockspec).
+ */
+export function extractLongTailDependencies(
+  manifestPath: string,
+  content: string,
+  ecosystem: Ecosystem,
+): ParsedManifestDep[] {
+  const deps: ParsedManifestDep[] = [];
+  const fileName = path.basename(manifestPath).toLowerCase();
+
+  if (ecosystem === "hackage") {
+    if (fileName.endsWith(".cabal")) {
+      let inBuildDeps = false;
+      for (const rawLine of content.split(/\r?\n/)) {
+        const cleaned = rawLine.replace(/--.*$/, "");
+        if (/^\s*build-depends\s*:/i.test(cleaned)) {
+          inBuildDeps = true;
+          const after = cleaned.split(":").slice(1).join(":");
+          for (const part of after.split(",")) {
+            const m = part
+              .trim()
+              .match(/^([A-Za-z0-9-]+)(?:\s+(?:==|>=|<=|\^>=|>|<)\s*([0-9.]+))?/);
+            if (m?.[1] && m[1] !== "base") {
+              deps.push({ ecosystem: "hackage", name: m[1], version: m[2] || "latest" });
+            }
+          }
+          continue;
+        }
+        if (inBuildDeps) {
+          if (/^\S/.test(cleaned) || /^\s*[A-Za-z0-9-]+\s*:/.test(cleaned)) {
+            inBuildDeps = false;
+            continue;
+          }
+          for (const part of cleaned.split(",")) {
+            const m = part
+              .trim()
+              .match(/^([A-Za-z0-9-]+)(?:\s+(?:==|>=|<=|\^>=|>|<)\s*([0-9.]+))?/);
+            if (m?.[1] && m[1] !== "base") {
+              deps.push({ ecosystem: "hackage", name: m[1], version: m[2] || "latest" });
+            }
+          }
+        }
+      }
+    } else if (fileName === "package.yaml") {
+      let inDeps = false;
+      for (const rawLine of content.split(/\r?\n/)) {
+        const trimmed = rawLine.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        if (trimmed === "dependencies:") {
+          inDeps = true;
+          continue;
+        }
+        if (inDeps && !rawLine.startsWith(" ") && !trimmed.startsWith("-")) {
+          inDeps = false;
+          continue;
+        }
+        if (inDeps && trimmed.startsWith("-")) {
+          const item = trimmed.slice(1).trim();
+          const m = item.match(/^([A-Za-z0-9-]+)(?:\s+(?:==|>=|<=|\^>=|>|<)\s*([0-9.]+))?/);
+          if (m?.[1] && m[1] !== "base") {
+            deps.push({ ecosystem: "hackage", name: m[1], version: m[2] || "latest" });
+          }
+        }
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "cran") {
+    if (fileName === "renv.lock") {
+      try {
+        const json = JSON.parse(content) as {
+          Packages?: Record<string, { Package?: string; Version?: string }>;
+        };
+        for (const [key, pkg] of Object.entries(json.Packages ?? {})) {
+          deps.push({
+            ecosystem: "cran",
+            name: pkg.Package ?? key,
+            version: pkg.Version ?? "latest",
+          });
+        }
+      } catch {
+        // Ignore malformed renv.lock
+      }
+      return deps;
+    }
+
+    let inField = false;
+    for (const rawLine of content.split(/\r?\n/)) {
+      if (/^(?:Imports|Depends|Suggests)\s*:/i.test(rawLine)) {
+        inField = true;
+        const after = rawLine.split(":").slice(1).join(":");
+        for (const entry of after.split(",")) {
+          const m = entry.trim().match(/^([A-Za-z0-9.]+)(?:\s*\((?:>=|==)\s*([^)]+)\))?/);
+          if (m?.[1] && m[1] !== "R") {
+            deps.push({ ecosystem: "cran", name: m[1], version: m[2]?.trim() || "latest" });
+          }
+        }
+        continue;
+      }
+      if (inField) {
+        if (/^\S/.test(rawLine)) {
+          inField = false;
+          continue;
+        }
+        for (const entry of rawLine.split(",")) {
+          const m = entry.trim().match(/^([A-Za-z0-9.]+)(?:\s*\((?:>=|==)\s*([^)]+)\))?/);
+          if (m?.[1] && m[1] !== "R") {
+            deps.push({ ecosystem: "cran", name: m[1], version: m[2]?.trim() || "latest" });
+          }
+        }
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "cpan") {
+    for (const m of content.matchAll(
+      /\brequires\s+["']([A-Za-z0-9_:]+)["'](?:\s*,\s*["'](?:[><=~!\s]*)?([^"']+)["'])?/g,
+    )) {
+      if (m[1]) {
+        deps.push({
+          ecosystem: "cpan",
+          name: m[1],
+          version: m[2]?.replace(/^[><=~\s]+/, "").trim() || "latest",
+        });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "luarocks") {
+    const depBlock = content.match(/\bdependencies\s*=\s*\{([\s\S]*?)\}/);
+    const inner = depBlock?.[1] ?? "";
+    for (const m of inner.matchAll(
+      /["']([A-Za-z0-9_.-]+)(?:\s*(?:>=|==|~>|<=|>|<)\s*([^"']+))?["']/g,
+    )) {
+      if (m[1] && m[1].toLowerCase() !== "lua") {
+        deps.push({
+          ecosystem: "luarocks",
+          name: m[1],
+          version: m[2]?.trim() || "latest",
+        });
+      }
+    }
+    return deps;
+  }
+
+  return deps;
 }

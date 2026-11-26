@@ -25,8 +25,29 @@ export type BuiltinEcosystem =
   | "rebar3"
   | "swift"
   | "cocoapods"
-  | "carthage";
+  | "carthage"
+  | "hackage"
+  | "cran"
+  | "cpan"
+  | "luarocks";
 export type Ecosystem = BuiltinEcosystem | (string & {});
+
+export interface CustomEngineDefinition {
+  name?: string;
+  manifests: string[];
+  lockfiles?: string[];
+  aliases?: string[];
+  purlType?: string;
+  osvEcosystem?: string;
+  sbomPurlType?: string;
+  command: string;
+  add?: string | string[];
+  remove?: string | string[];
+  install?: string | string[];
+  update?: string | string[];
+  test?: string | string[];
+  script?: string | string[];
+}
 
 export interface EngineContext {
   cwd?: string;
@@ -100,7 +121,8 @@ export interface WorkspaceConfig {
     deno?: string;
     conda?: string;
     concurrency?: number;
-    [key: string]: string | number | undefined;
+    custom?: Record<string, CustomEngineDefinition>;
+    [key: string]: string | number | Record<string, CustomEngineDefinition> | undefined;
   };
   tasks?: Record<string, TaskDefinition | string>;
   scripts?: Record<string, TaskDefinition | string>;

@@ -63,6 +63,10 @@ test("Shell Auto-Completion - Dynamic Resolution", async (t) => {
       "swift",
       "cocoapods",
       "carthage",
+      "hackage",
+      "cran",
+      "cpan",
+      "luarocks",
     ]);
   });
 

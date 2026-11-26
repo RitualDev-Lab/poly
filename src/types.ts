@@ -17,7 +17,15 @@ export type BuiltinEcosystem =
   | "conan"
   | "vcpkg"
   | "meson"
-  | "julia";
+  | "julia"
+  | "maven"
+  | "gradle"
+  | "sbt"
+  | "hex"
+  | "rebar3"
+  | "swift"
+  | "cocoapods"
+  | "carthage";
 export type Ecosystem = BuiltinEcosystem | (string & {});
 
 export interface EngineContext {

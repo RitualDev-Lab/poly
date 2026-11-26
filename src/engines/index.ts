@@ -14,6 +14,17 @@ export {
   vcpkgAdapter,
 } from "./cpp-julia.js";
 export {
+  TIER2_MANIFEST_ADAPTERS,
+  carthageAdapter,
+  cocoapodsAdapter,
+  gradleAdapter,
+  hexAdapter,
+  mavenAdapter,
+  rebar3Adapter,
+  sbtAdapter,
+  swiftAdapter,
+} from "./tier2-manifest.js";
+export {
   DeclarativeEngine,
   defineDeclarativeAdapter,
   type DeclarativeCommandSpec,

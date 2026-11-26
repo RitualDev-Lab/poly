@@ -68,13 +68,21 @@ export class OsvClient {
       return [];
     }
 
-    const queries: OsvQueryItem[] = queryable.map(({ pkg, osvEcosystem }) => ({
-      package: {
-        name: pkg.name,
-        ecosystem: osvEcosystem,
-      },
-      version: pkg.version.replace(/^[~^>=<\s]+/, "").trim(),
-    }));
+    const queries: OsvQueryItem[] = queryable.map(({ pkg, osvEcosystem }) => {
+      let osvName = pkg.name;
+      if (osvEcosystem === "Maven" && osvName.includes("/")) {
+        osvName = osvName.replace("/", ":");
+      } else if (osvEcosystem === "SwiftURL") {
+        osvName = osvName.replace(/^https?:\/\//i, "").replace(/\.git$/i, "");
+      }
+      return {
+        package: {
+          name: osvName,
+          ecosystem: osvEcosystem,
+        },
+        version: pkg.version.replace(/^[~^>=<\s]+/, "").trim(),
+      };
+    });
 
     try {
       const response = await fetch(OsvClient.OSV_BATCH_URL, {

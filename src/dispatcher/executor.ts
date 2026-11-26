@@ -78,6 +78,12 @@ export class PolyDispatcher {
       logExecutionPlan("add", pkg, engine.name, command, finalArgs);
     }
 
+    // 4.5 Apply Tier 2 manifest mutation if supported by engine (JVM, Elixir, Swift)
+    const mutation = engine.applyManifestAdd?.(pkg, cwd);
+    if (mutation?.changed && !options?.silent && !options?.agent) {
+      logInfo(`[manifest] Updated ${mutation.manifestFile}`);
+    }
+
     // 5. Execute native command
     const result = await engine.execute(command, finalArgs, cwd, {
       silent: options?.silent || options?.agent,
@@ -102,6 +108,10 @@ export class PolyDispatcher {
     }
 
     const engine = this.getEngineForEcosystem(pkg.ecosystem, cwd);
+    const mutation = engine.applyManifestRemove?.(pkg, cwd);
+    if (mutation?.changed && !options?.silent && !options?.agent) {
+      logInfo(`[manifest] Updated ${mutation.manifestFile}`);
+    }
     const { command, args } = engine.resolveRemoveArgs(pkg);
 
     if (!options?.silent) {

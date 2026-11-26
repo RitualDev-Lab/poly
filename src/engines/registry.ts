@@ -8,6 +8,7 @@ import { GoEngine } from "./go.js";
 import { NodeEngine } from "./node.js";
 import { PythonEngine } from "./python.js";
 import { RustEngine } from "./rust.js";
+import { TIER2_MANIFEST_ADAPTERS } from "./tier2-manifest.js";
 
 /**
  * Central extensible EngineAdapter registry powering detection, PURL parsing,
@@ -292,6 +293,9 @@ for (const adapter of BACKEND_MOBILE_ADAPTERS) {
   engineRegistry.register(adapter);
 }
 for (const adapter of CPP_JULIA_ADAPTERS) {
+  engineRegistry.register(adapter);
+}
+for (const adapter of TIER2_MANIFEST_ADAPTERS) {
   engineRegistry.register(adapter);
 }
 

@@ -346,9 +346,204 @@ export function extractDirectDependencies(manifestPath: string, ecosystem: Ecosy
       }
       break;
     }
+    case "maven":
+    case "gradle":
+    case "sbt":
+    case "hex":
+    case "rebar3":
+    case "swift":
+    case "cocoapods":
+    case "carthage": {
+      for (const item of extractTier2ManifestDependencies(manifestPath, content, ecosystem)) {
+        deps.push(`${item.ecosystem}:${item.name}@${item.version}`);
+      }
+      break;
+    }
   }
 
   return deps.sort();
+}
+
+function parseGradleCatalogContent(catalogContent: string, deps: ParsedManifestDep[]): void {
+  const versions = new Map<string, string>();
+  let section = "";
+  const rawLibraries: string[] = [];
+
+  for (const rawLine of catalogContent.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, "").trim();
+    if (!line) continue;
+    const sec = line.match(/^\[([^\]]+)\]$/);
+    if (sec) {
+      section = sec[1]?.trim() ?? "";
+      continue;
+    }
+    if (section === "versions") {
+      const kv = line.match(/^([a-zA-Z0-9_.-]+)\s*=\s*["']([^"']+)["']/);
+      if (kv?.[1] && kv[2]) versions.set(kv[1], kv[2].trim());
+    } else if (section === "libraries") {
+      rawLibraries.push(line);
+    }
+  }
+
+  for (const line of rawLibraries) {
+    const moduleMatch = line.match(/\bmodule\s*=\s*["']([^"':]+):([^"']+)["']/);
+    const groupMatch = line.match(/\bgroup\s*=\s*["']([^"']+)["']/);
+    const nameMatch = line.match(/\bname\s*=\s*["']([^"']+)["']/);
+    const groupId = moduleMatch?.[1] ?? groupMatch?.[1];
+    const artifactId = moduleMatch?.[2] ?? nameMatch?.[1];
+    if (!groupId || !artifactId) continue;
+
+    const refMatch = line.match(/\bversion\.ref\s*=\s*["']([^"']+)["']/);
+    const directVerMatch = line.match(/\bversion\s*=\s*["']([^"']+)["']/);
+    const version = (refMatch?.[1] ? versions.get(refMatch[1]) : directVerMatch?.[1]) ?? "latest";
+    deps.push({ ecosystem: "gradle", name: `${groupId}:${artifactId}`, version });
+  }
+}
+
+/**
+ * Extracts dependency name/version pairs for Phase 4 Tier 2 ecosystems
+ * (Maven/Ivy, Gradle/Version Catalog, sbt, Mix/Hex, Rebar3, SPM, CocoaPods, Carthage).
+ */
+export function extractTier2ManifestDependencies(
+  manifestPath: string,
+  content: string,
+  ecosystem: Ecosystem,
+): ParsedManifestDep[] {
+  const deps: ParsedManifestDep[] = [];
+  const fileName = path.basename(manifestPath);
+
+  if (ecosystem === "maven") {
+    if (fileName === "ivy.xml") {
+      for (const m of content.matchAll(
+        /<dependency\b[^>]*org=["']([^"']+)["'][^>]*name=["']([^"']+)["'](?:\s+[^>]*rev=["']([^"']+)["'])?/gi,
+      )) {
+        if (m[1] && m[2]) {
+          deps.push({
+            ecosystem: "maven",
+            name: `${m[1].trim()}:${m[2].trim()}`,
+            version: (m[3] || "latest").trim(),
+          });
+        }
+      }
+      return deps;
+    }
+    for (const block of content.matchAll(/<dependency>([\s\S]*?)<\/dependency>/gi)) {
+      const inner = block[1] ?? "";
+      const g = inner.match(/<groupId>\s*([^<\s]+)\s*<\/groupId>/i)?.[1];
+      const a = inner.match(/<artifactId>\s*([^<\s]+)\s*<\/artifactId>/i)?.[1];
+      const v = inner.match(/<version>\s*([^<\s]+)\s*<\/version>/i)?.[1];
+      if (g && a) {
+        deps.push({ ecosystem: "maven", name: `${g}:${a}`, version: v || "latest" });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "gradle") {
+    if (fileName === "libs.versions.toml") {
+      parseGradleCatalogContent(content, deps);
+      return deps;
+    }
+    for (const m of content.matchAll(
+      /\b(?:implementation|api|testImplementation|compileOnly|runtimeOnly)\s*\(?\s*["']([^"':\s]+):([^"':\s]+)(?::([^"'\s]+))?["']/g,
+    )) {
+      if (m[1] && m[2]) {
+        deps.push({
+          ecosystem: "gradle",
+          name: `${m[1]}:${m[2]}`,
+          version: m[3] || "latest",
+        });
+      }
+    }
+    const siblingCatalog = path.join(path.dirname(manifestPath), "gradle", "libs.versions.toml");
+    if (fs.existsSync(siblingCatalog)) {
+      parseGradleCatalogContent(fs.readFileSync(siblingCatalog, "utf-8"), deps);
+    }
+    return deps;
+  }
+
+  if (ecosystem === "sbt") {
+    for (const m of content.matchAll(
+      /["']([^"']+)["']\s*%{1,2}\s*["']([^"']+)["']\s*%\s*["']([^"']+)["']/g,
+    )) {
+      if (m[1] && m[2]) {
+        deps.push({ ecosystem: "sbt", name: `${m[1]}:${m[2]}`, version: m[3] || "latest" });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "hex") {
+    for (const m of content.matchAll(/\{:([a-zA-Z0-9_]+),\s*["']([^"']+)["']/g)) {
+      if (m[1]) {
+        deps.push({
+          ecosystem: "hex",
+          name: m[1],
+          version: m[2]?.replace(/^[~>=<\s]+/, "").trim() || "latest",
+        });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "rebar3") {
+    const block = content.match(/\{deps,\s*\[([\s\S]*?)\]\}\s*\./);
+    const body = block?.[1] ?? content;
+    for (const m of body.matchAll(/\{([a-zA-Z0-9_]+),\s*["']([^"']+)["']\}/g)) {
+      if (m[1]) {
+        deps.push({ ecosystem: "rebar3", name: m[1], version: m[2]?.trim() || "latest" });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "swift") {
+    for (const m of content.matchAll(
+      /\.package\(\s*url:\s*["']([^"']+)["'](?:\s*,\s*(?:from|exact)\s*:\s*["']([^"']+)["'])?/g,
+    )) {
+      if (m[1]) {
+        const canonical = m[1].replace(/^https?:\/\//i, "").replace(/\.git$/i, "");
+        deps.push({
+          ecosystem: "swift",
+          name: canonical,
+          version: m[2]?.trim() || "latest",
+        });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "cocoapods") {
+    for (const rawLine of content.split(/\r?\n/)) {
+      const m = rawLine.trim().match(/^pod\s+["']([^"']+)["'](?:\s*,\s*["']([^"']+)["'])?/);
+      if (m?.[1]) {
+        deps.push({
+          ecosystem: "cocoapods",
+          name: m[1],
+          version: m[2]?.replace(/^[~>=<\s]+/, "").trim() || "latest",
+        });
+      }
+    }
+    return deps;
+  }
+
+  if (ecosystem === "carthage") {
+    for (const rawLine of content.split(/\r?\n/)) {
+      const m = rawLine
+        .trim()
+        .match(/^(?:github|git|binary)\s+["']([^"']+)["'](?:\s+(?:~>|==|>=)\s*([^\s#]+))?/);
+      if (m?.[1]) {
+        deps.push({
+          ecosystem: "carthage",
+          name: m[1],
+          version: m[2]?.trim() || "latest",
+        });
+      }
+    }
+    return deps;
+  }
+
+  return deps;
 }
 
 function extractCppJuliaDependencies(

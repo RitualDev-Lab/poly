@@ -2,6 +2,7 @@ import fs from "node:fs";
 import type { Ecosystem, EngineContext } from "../types.js";
 import { BACKEND_MOBILE_ADAPTERS } from "./backend-mobile.js";
 import type { BaseEngine } from "./base.js";
+import { CPP_JULIA_ADAPTERS } from "./cpp-julia.js";
 import { type EngineAdapter, defineDeclarativeAdapter } from "./declarative.js";
 import { GoEngine } from "./go.js";
 import { NodeEngine } from "./node.js";
@@ -288,6 +289,9 @@ engineRegistry.register(condaAdapter);
 engineRegistry.register(cargoAdapter);
 engineRegistry.register(goAdapter);
 for (const adapter of BACKEND_MOBILE_ADAPTERS) {
+  engineRegistry.register(adapter);
+}
+for (const adapter of CPP_JULIA_ADAPTERS) {
   engineRegistry.register(adapter);
 }
 

@@ -270,6 +270,41 @@ export class PolyDoctor {
         args: ["--version"],
         hint: "https://dart.dev/get-dart",
       },
+      {
+        id: "toolchain-conan",
+        name: "Conan C/C++",
+        cmd: "conan",
+        args: ["--version"],
+        hint: "https://conan.io",
+      },
+      {
+        id: "toolchain-vcpkg",
+        name: "vcpkg C/C++",
+        cmd: "vcpkg",
+        args: ["version"],
+        hint: "https://vcpkg.io",
+      },
+      {
+        id: "toolchain-meson",
+        name: "Meson Build",
+        cmd: "meson",
+        args: ["--version"],
+        hint: "https://mesonbuild.com",
+      },
+      {
+        id: "toolchain-cmake",
+        name: "CMake",
+        cmd: "cmake",
+        args: ["--version"],
+        hint: "https://cmake.org",
+      },
+      {
+        id: "toolchain-julia",
+        name: "Julia Pkg.jl",
+        cmd: "julia",
+        args: ["--version"],
+        hint: "https://julialang.org/downloads/",
+      },
     ];
 
     for (const tc of toolchains) {

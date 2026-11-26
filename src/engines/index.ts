@@ -7,6 +7,13 @@ export {
   pubAdapter,
 } from "./backend-mobile.js";
 export {
+  CPP_JULIA_ADAPTERS,
+  conanAdapter,
+  juliaAdapter,
+  mesonAdapter,
+  vcpkgAdapter,
+} from "./cpp-julia.js";
+export {
   DeclarativeEngine,
   defineDeclarativeAdapter,
   type DeclarativeCommandSpec,

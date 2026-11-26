@@ -337,7 +337,121 @@ export function extractDirectDependencies(manifestPath: string, ecosystem: Ecosy
       }
       break;
     }
+    case "conan":
+    case "vcpkg":
+    case "meson":
+    case "julia": {
+      for (const item of extractCppJuliaDependencies(manifestPath, content, ecosystem)) {
+        deps.push(`${item.ecosystem}:${item.name}@${item.version}`);
+      }
+      break;
+    }
   }
 
   return deps.sort();
+}
+
+function extractCppJuliaDependencies(
+  manifestPath: string,
+  content: string,
+  ecosystem: string,
+): Array<{ ecosystem: string; name: string; version: string }> {
+  const results: Array<{ ecosystem: string; name: string; version: string }> = [];
+  const lowerPath = manifestPath.toLowerCase();
+
+  if (ecosystem === "conan") {
+    if (lowerPath.endsWith(".txt")) {
+      let inRequires = false;
+      for (const rawLine of content.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith("#")) continue;
+        if (line.startsWith("[")) {
+          inRequires = line === "[requires]" || line === "[tool_requires]";
+          continue;
+        }
+        if (inRequires) {
+          const ref = line.split("@")[0]?.trim() ?? "";
+          const slashIdx = ref.indexOf("/");
+          if (slashIdx > 0) {
+            const name = ref.slice(0, slashIdx).trim();
+            const version = ref.slice(slashIdx + 1).trim() || "*";
+            if (name) results.push({ ecosystem, name, version });
+          }
+        }
+      }
+    } else if (lowerPath.endsWith(".py")) {
+      const matches = content.matchAll(/["']([A-Za-z0-9_.+-]+)\/([^"'@\s]+)(?:@[^"']*)?["']/g);
+      for (const m of matches) {
+        if (m[1] && m[2]) {
+          results.push({ ecosystem, name: m[1], version: m[2] });
+        }
+      }
+    }
+    return results;
+  }
+
+  if (ecosystem === "vcpkg") {
+    try {
+      const parsed = JSON.parse(content) as {
+        dependencies?: Array<string | { name?: string; "version>="?: string }>;
+      };
+      for (const dep of parsed.dependencies ?? []) {
+        if (typeof dep === "string") {
+          if (dep.trim()) results.push({ ecosystem, name: dep.trim(), version: "*" });
+        } else if (
+          dep &&
+          typeof dep === "object" &&
+          typeof dep.name === "string" &&
+          dep.name.trim()
+        ) {
+          results.push({
+            ecosystem,
+            name: dep.name.trim(),
+            version: dep["version>="]?.trim() || "*",
+          });
+        }
+      }
+    } catch {
+      // Ignore malformed vcpkg.json during lockfile hashing
+    }
+    return results;
+  }
+
+  if (ecosystem === "meson") {
+    const seen = new Set<string>();
+    const matches = content.matchAll(/\b(?:dependency|subproject)\(\s*["']([^"']+)["']/g);
+    for (const m of matches) {
+      const name = m[1]?.trim();
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        results.push({ ecosystem, name, version: "*" });
+      }
+    }
+    return results;
+  }
+
+  // Julia Project.toml: parse [deps] UUID entries and optional [compat] version constraints
+  const compatVersions = new Map<string, string>();
+  let section = "";
+  const depNames: string[] = [];
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, "").trim();
+    if (!line) continue;
+    const secMatch = line.match(/^\[([^\]]+)\]$/);
+    if (secMatch) {
+      section = secMatch[1]?.trim() ?? "";
+      continue;
+    }
+    if (section === "deps") {
+      const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*"([^"]+)"/);
+      if (kv?.[1]) depNames.push(kv[1]);
+    } else if (section === "compat") {
+      const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*"([^"]+)"/);
+      if (kv?.[1] && kv[2]) compatVersions.set(kv[1], kv[2].trim());
+    }
+  }
+  for (const name of depNames) {
+    results.push({ ecosystem, name, version: compatVersions.get(name) ?? "*" });
+  }
+  return results;
 }

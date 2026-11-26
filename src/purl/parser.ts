@@ -1,14 +1,9 @@
+import { engineRegistry } from "../engines/registry.js";
 import type { Ecosystem, PackageSpec } from "../types.js";
 
 /**
  * Parses shorthand ecosystem tokens, standard Package URLs (PURL), or bare package strings.
- * Examples:
- *   - "npm:axios"
- *   - "pypi:fastapi@^0.110.0"
- *   - "cargo:tokio@1.38.0"
- *   - "go:github.com/gin-gonic/gin@v1.9.1"
- *   - "pkg:npm/%40ritualdev-lab/agentshield@0.2.2"
- *   - "requests"
+ * Supported prefixes are resolved dynamically from EngineRegistry (e.g. npm:, jsr:, pypi:, conda:, cargo:, go:).
  */
 export function parsePackageSpec(input: string, options?: { isDev?: boolean }): PackageSpec {
   const trimmed = input.trim();
@@ -16,29 +11,31 @@ export function parsePackageSpec(input: string, options?: { isDev?: boolean }): 
     throw new Error("Cannot parse an empty package specification.");
   }
 
-  // 1. Check for standard Package URL: pkg:<type>/<namespace>/<name>@<version>
+  // 1. Standard Package URL: pkg:<type>/<namespace>/<name>@<version>
   if (trimmed.startsWith("pkg:")) {
     return parseStandardPurl(trimmed, options?.isDev);
   }
 
-  // 2. Check for shorthand ecosystem prefix: <ecosystem>:<name>[@<version>]
-  const prefixMatch = trimmed.match(/^(npm|pypi|cargo|go):(.*)$/i);
+  // 2. Shorthand ecosystem prefix: <ecosystem>:<name>[@<version>]
+  const prefixMatch = trimmed.match(/^([a-z0-9][a-z0-9_-]*):(.*)$/i);
   if (prefixMatch) {
-    const rawEcosystem = prefixMatch[1].toLowerCase() as Ecosystem;
-    const rest = prefixMatch[2];
-    const { namespace, name, version } = parseNameAndVersion(rest);
+    const resolvedEcosystem = engineRegistry.resolveEcosystem(prefixMatch[1]);
+    if (resolvedEcosystem) {
+      const rest = prefixMatch[2];
+      const { namespace, name, version } = parseNameAndVersion(rest);
 
-    return {
-      raw: trimmed,
-      ecosystem: rawEcosystem,
-      namespace,
-      name,
-      version,
-      isDev: options?.isDev ?? false,
-    };
+      return {
+        raw: trimmed,
+        ecosystem: resolvedEcosystem,
+        namespace,
+        name,
+        version,
+        isDev: options?.isDev ?? false,
+      };
+    }
   }
 
-  // 3. Bare package specification (ecosystem will be resolved via context detection)
+  // 3. Bare package specification (ecosystem resolved via context detection)
   const { namespace, name, version } = parseNameAndVersion(trimmed);
   return {
     raw: trimmed,
@@ -61,7 +58,6 @@ function parseNameAndVersion(input: string): {
   let target = input;
   let namespace: string | undefined;
 
-  // Handle npm scoped packages like @ritualdev-lab/agentshield
   if (target.startsWith("@")) {
     const slashIdx = target.indexOf("/");
     if (slashIdx !== -1) {
@@ -70,7 +66,6 @@ function parseNameAndVersion(input: string): {
     }
   }
 
-  // Handle version separator @
   const atIdx = target.indexOf("@");
   if (atIdx !== -1) {
     const name = target.substring(0, atIdx);
@@ -82,7 +77,7 @@ function parseNameAndVersion(input: string): {
 }
 
 /**
- * Parses official Package URL format (RFC spec)
+ * Parses official Package URL format (RFC spec) using registered PURL types
  */
 function parseStandardPurl(purl: string, isDev?: boolean): PackageSpec {
   const withoutScheme = purl.substring(4); // remove 'pkg:'
@@ -92,23 +87,9 @@ function parseStandardPurl(purl: string, isDev?: boolean): PackageSpec {
   }
 
   const rawType = withoutScheme.substring(0, slashIdx).toLowerCase();
-  let ecosystem: Ecosystem;
-  switch (rawType) {
-    case "npm":
-      ecosystem = "npm";
-      break;
-    case "pypi":
-      ecosystem = "pypi";
-      break;
-    case "cargo":
-      ecosystem = "cargo";
-      break;
-    case "golang":
-    case "go":
-      ecosystem = "go";
-      break;
-    default:
-      throw new Error(`Unsupported PURL ecosystem type '${rawType}' in '${purl}'.`);
+  const ecosystem: Ecosystem | undefined = engineRegistry.resolvePurlType(rawType);
+  if (!ecosystem) {
+    throw new Error(`Unsupported PURL ecosystem type '${rawType}' in '${purl}'.`);
   }
 
   const rest = decodeURIComponent(withoutScheme.substring(slashIdx + 1));

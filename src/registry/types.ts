@@ -12,6 +12,7 @@ export interface CorporateRegistryConfig {
   pypi?: RegistryEndpoint;
   cargo?: RegistryEndpoint;
   go?: RegistryEndpoint;
+  [ecosystem: string]: RegistryEndpoint | undefined;
 }
 
 export interface RegistryHealthStatus {

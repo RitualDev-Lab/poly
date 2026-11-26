@@ -1,3 +1,4 @@
+import { engineRegistry } from "../engines/registry.js";
 import type { Ecosystem } from "../types.js";
 import type { AuditFinding, VulnerabilitySeverity } from "./types.js";
 
@@ -57,14 +58,20 @@ export class OsvClient {
   async queryPackages(
     packages: Array<{ name: string; ecosystem: Ecosystem; version: string; memberPath: string }>,
   ): Promise<AuditFinding[]> {
-    if (packages.length === 0) {
+    const queryable = packages
+      .map((pkg) => ({ pkg, osvEcosystem: this.mapEcosystemToOsv(pkg.ecosystem) }))
+      .filter((entry): entry is { pkg: (typeof packages)[number]; osvEcosystem: string } =>
+        Boolean(entry.osvEcosystem),
+      );
+
+    if (queryable.length === 0) {
       return [];
     }
 
-    const queries: OsvQueryItem[] = packages.map((pkg) => ({
+    const queries: OsvQueryItem[] = queryable.map(({ pkg, osvEcosystem }) => ({
       package: {
         name: pkg.name,
-        ecosystem: this.mapEcosystemToOsv(pkg.ecosystem),
+        ecosystem: osvEcosystem,
       },
       version: pkg.version.replace(/^[~^>=<]/, "").trim(),
     }));
@@ -89,7 +96,7 @@ export class OsvClient {
 
       data.results?.forEach((result, idx) => {
         if (!result.vulns || result.vulns.length === 0) return;
-        const targetPkg = packages[idx];
+        const targetPkg = queryable[idx].pkg;
 
         for (const vuln of result.vulns) {
           const severity = this.normalizeSeverity(vuln);
@@ -133,17 +140,8 @@ export class OsvClient {
     }
   }
 
-  private mapEcosystemToOsv(ecosystem: Ecosystem): string {
-    switch (ecosystem) {
-      case "npm":
-        return "npm";
-      case "pypi":
-        return "PyPI";
-      case "cargo":
-        return "crates.io";
-      case "go":
-        return "Go";
-    }
+  private mapEcosystemToOsv(ecosystem: Ecosystem): string | undefined {
+    return engineRegistry.getOsvEcosystem(ecosystem);
   }
 
   private normalizeSeverity(vuln: {

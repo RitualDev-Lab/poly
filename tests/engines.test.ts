@@ -87,3 +87,109 @@ test("Go Engine - Resolves go get and go mod tidy", () => {
   const rmArgs = engine.resolveRemoveArgs(pkg);
   assert.deepEqual(rmArgs.args, ["mod", "tidy"]);
 });
+
+test("Node Engine - Resolves Deno & JSR add/remove/install/update syntax", () => {
+  const denoEngine = new NodeEngine({
+    manifest: "deno.json",
+    lockfile: "deno.lock",
+    ecosystem: "jsr",
+    preferredCli: "deno",
+  });
+  assert.equal(denoEngine.getEffectiveCli(), "deno");
+
+  const jsrPkg: PackageSpec = {
+    raw: "jsr:@std/path@^1.0.0",
+    ecosystem: "jsr",
+    namespace: "@std",
+    name: "path",
+    version: "^1.0.0",
+  };
+  assert.deepEqual(denoEngine.resolveAddArgs(jsrPkg), {
+    command: "deno",
+    args: ["add", "jsr:@std/path@^1.0.0"],
+  });
+  assert.deepEqual(denoEngine.resolveRemoveArgs(jsrPkg), {
+    command: "deno",
+    args: ["remove", "@std/path"],
+  });
+  assert.deepEqual(denoEngine.resolveInstallArgs(), {
+    command: "deno",
+    args: ["install"],
+  });
+  assert.deepEqual(denoEngine.resolveUpdateArgs(jsrPkg), {
+    command: "deno",
+    args: ["outdated", "--update", "@std/path@^1.0.0"],
+  });
+
+  const npmPkgInDeno: PackageSpec = {
+    raw: "npm:zod@^3.22.4",
+    ecosystem: "npm",
+    name: "zod",
+    version: "^3.22.4",
+  };
+  assert.deepEqual(denoEngine.resolveAddArgs(npmPkgInDeno), {
+    command: "deno",
+    args: ["add", "npm:zod@^3.22.4"],
+  });
+
+  const pnpmWithJsr = new NodeEngine({ lockfile: "pnpm-lock.yaml", preferredCli: "pnpm" });
+  assert.deepEqual(pnpmWithJsr.resolveAddArgs(jsrPkg), {
+    command: "pnpm",
+    args: ["dlx", "jsr", "add", "@std/path@^1.0.0"],
+  });
+});
+
+test("Python Engine - Resolves Pipenv & Conda add/remove/install/update syntax", () => {
+  const pipenvEngine = new PythonEngine({ manifest: "Pipfile", lockfile: "Pipfile.lock" });
+  assert.equal(pipenvEngine.getEffectiveCli(), "pipenv");
+
+  const reqPkg: PackageSpec = {
+    raw: "pypi:requests@>=2.31.0",
+    ecosystem: "pypi",
+    name: "requests",
+    version: ">=2.31.0",
+    isDev: true,
+  };
+  assert.deepEqual(pipenvEngine.resolveAddArgs(reqPkg), {
+    command: "pipenv",
+    args: ["install", "requests>=2.31.0", "--dev"],
+  });
+  assert.deepEqual(pipenvEngine.resolveRemoveArgs(reqPkg), {
+    command: "pipenv",
+    args: ["uninstall", "requests"],
+  });
+  assert.deepEqual(pipenvEngine.resolveInstallArgs(), {
+    command: "pipenv",
+    args: ["sync"],
+  });
+
+  const condaEngine = new PythonEngine({
+    ecosystem: "conda",
+    manifest: "environment.yml",
+    preferredCli: "conda",
+  });
+  assert.equal(condaEngine.getEffectiveCli(), "conda");
+
+  const condaPkg: PackageSpec = {
+    raw: "conda:numpy@1.26.4",
+    ecosystem: "conda",
+    name: "numpy",
+    version: "1.26.4",
+  };
+  assert.deepEqual(condaEngine.resolveAddArgs(condaPkg), {
+    command: "conda",
+    args: ["install", "-y", "numpy=1.26.4"],
+  });
+  assert.deepEqual(condaEngine.resolveRemoveArgs(condaPkg), {
+    command: "conda",
+    args: ["remove", "-y", "numpy"],
+  });
+  assert.deepEqual(condaEngine.resolveInstallArgs(), {
+    command: "conda",
+    args: ["env", "update", "-f", "environment.yml", "--prune"],
+  });
+  assert.deepEqual(condaEngine.resolveUpdateArgs(), {
+    command: "conda",
+    args: ["update", "-y", "--all"],
+  });
+});

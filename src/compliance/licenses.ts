@@ -42,7 +42,7 @@ export class LicenseAuditor {
     if (lock) {
       for (const member of lock.members) {
         for (const depStr of member.directDependencies) {
-          const match = depStr.match(/^([a-z]+):(.*)$/);
+          const match = depStr.match(/^([a-z0-9_-]+):(.*)$/);
           if (match) {
             const ecosystem = match[1] as Ecosystem;
             const rest = match[2];

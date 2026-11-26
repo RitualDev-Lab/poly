@@ -75,27 +75,31 @@ export class PolyDoctor {
       });
     }
 
-    // Node Package Managers
-    const managers: Array<{ name: string; cmd: string }> = [
-      { name: "pnpm", cmd: "pnpm" },
-      { name: "bun", cmd: "bun" },
-      { name: "yarn", cmd: "yarn" },
-      { name: "npm", cmd: "npm" },
+    // Node / Deno JS & TS Package Managers
+    const managers: Array<{ name: string; cmd: string; args: string[] }> = [
+      { name: "pnpm", cmd: "pnpm", args: ["-v"] },
+      { name: "bun", cmd: "bun", args: ["-v"] },
+      { name: "yarn", cmd: "yarn", args: ["-v"] },
+      { name: "npm", cmd: "npm", args: ["-v"] },
+      { name: "deno", cmd: "deno", args: ["--version"] },
     ];
     const availableManagers: string[] = [];
 
     for (const m of managers) {
-      const res = this.runCommandSafe(m.cmd, ["-v"]);
+      const res = this.runCommandSafe(m.cmd, m.args);
       if (res.available) {
-        availableManagers.push(`${m.name} (${res.output.trim()})`);
+        const firstLine = res.output.trim().split(/\r?\n/)[0].trim();
+        availableManagers.push(`${m.name} (${firstLine})`);
       }
     }
 
     if (availableManagers.length > 0) {
-      const hasFast = availableManagers.some((m) => m.startsWith("pnpm") || m.startsWith("bun"));
+      const hasFast = availableManagers.some(
+        (m) => m.startsWith("pnpm") || m.startsWith("bun") || m.startsWith("deno"),
+      );
       checks.push({
         id: "toolchain-node-managers",
-        name: "Node Package Managers",
+        name: "JS/TS Package Managers (Node / Deno)",
         category: "Toolchain",
         status: "OK",
         message: `Detected: ${availableManagers.join(", ")}${hasFast ? " (High-speed runner ready)" : ""}`,
@@ -103,10 +107,10 @@ export class PolyDoctor {
     } else {
       checks.push({
         id: "toolchain-node-managers",
-        name: "Node Package Managers",
+        name: "JS/TS Package Managers (Node / Deno)",
         category: "Toolchain",
         status: "FAIL",
-        message: "No Node package manager (pnpm, bun, yarn, npm) found in PATH.",
+        message: "No JS/TS package manager (pnpm, bun, yarn, npm, deno) found in PATH.",
         remediation: "Install npm or pnpm globally: npm install -g pnpm",
       });
     }
@@ -142,24 +146,41 @@ export class PolyDoctor {
       });
     }
 
-    // Check uv
-    const uvRes = this.runCommandSafe("uv", ["--version"]);
-    if (uvRes.available) {
+    // Check Python ecosystem package managers (uv, poetry, pipenv, conda, mamba)
+    const pyManagers: Array<{ name: string; cmd: string; args: string[] }> = [
+      { name: "uv", cmd: "uv", args: ["--version"] },
+      { name: "poetry", cmd: "poetry", args: ["--version"] },
+      { name: "pipenv", cmd: "pipenv", args: ["--version"] },
+      { name: "mamba", cmd: "mamba", args: ["--version"] },
+      { name: "conda", cmd: "conda", args: ["--version"] },
+    ];
+    const detectedPyManagers: string[] = [];
+    for (const m of pyManagers) {
+      const res = this.runCommandSafe(m.cmd, m.args);
+      if (res.available) {
+        detectedPyManagers.push(`${m.name} (${res.output.trim().split(/\r?\n/)[0].trim()})`);
+      }
+    }
+
+    if (detectedPyManagers.some((d) => d.startsWith("uv"))) {
       checks.push({
         id: "toolchain-python-uv",
-        name: "Astral uv Package Manager",
+        name: "Python Package Managers",
         category: "Toolchain",
         status: "OK",
-        version: uvRes.output.trim(),
-        message: `uv active (${uvRes.output.trim()}) — ultra-fast sub-second resolver enabled`,
+        version: detectedPyManagers[0],
+        message: `Detected: ${detectedPyManagers.join(", ")} — ultra-fast resolver ready`,
       });
     } else if (pyRes.available) {
       checks.push({
         id: "toolchain-python-uv",
-        name: "Astral uv Package Manager",
+        name: "Python Package Managers",
         category: "Toolchain",
         status: "WARN",
-        message: "uv is not installed. Falling back to pip/poetry (10x-50x slower).",
+        message:
+          detectedPyManagers.length > 0
+            ? `Detected ${detectedPyManagers.join(", ")}. uv is not installed (10x-50x faster fallback available).`
+            : "uv is not installed. Falling back to pip (10x-50x slower).",
         remediation:
           "Install uv for lightning-fast Python installs: curl -LsSf https://astral.sh/uv/install.sh | sh",
       });
@@ -249,6 +270,7 @@ export class PolyDoctor {
   ): Promise<void> {
     const defaultEndpoints = [
       { name: "npm Registry", url: "https://registry.npmjs.org" },
+      { name: "JSR Registry", url: "https://jsr.io" },
       { name: "PyPI Simple API", url: "https://pypi.org/simple" },
       { name: "crates.io", url: "https://crates.io" },
     ];

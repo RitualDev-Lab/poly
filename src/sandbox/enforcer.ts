@@ -1,3 +1,4 @@
+import { engineRegistry } from "../engines/registry.js";
 import type { Ecosystem, PackageSpec } from "../types.js";
 import { scanPackageLifecycleScripts } from "./scanner.js";
 import type { SandboxScanResult } from "./types.js";
@@ -23,32 +24,12 @@ export function injectSandboxFlags(
   const isAllowed = pkgName && options.allowScripts?.includes(pkgName);
   if (isAllowed) return args;
 
-  const modified = [...args];
-
-  switch (ecosystem) {
-    case "npm": {
-      // For pnpm, npm, bun, yarn: inject --ignore-scripts
-      if (!modified.includes("--ignore-scripts")) {
-        modified.push("--ignore-scripts");
-      }
-      break;
-    }
-
-    case "pypi": {
-      // For pip or uv: disallow arbitrary build-time execution
-      if (command === "pip" && !modified.includes("--no-build-isolation")) {
-        modified.push("--no-build-isolation");
-      }
-      break;
-    }
-
-    case "cargo":
-    case "go":
-      // Cargo and Go compile standard dependency trees without arbitrary pre/post install scripts
-      break;
+  const adapter = engineRegistry.getAdapter(ecosystem);
+  if (adapter?.injectSandboxFlags) {
+    return adapter.injectSandboxFlags(command, args);
   }
 
-  return modified;
+  return [...args];
 }
 
 /**

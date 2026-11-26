@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { engineRegistry } from "../engines/registry.js";
 import { parsePackageSpec } from "../purl/parser.js";
 import type { Ecosystem } from "../types.js";
 import { logError, logHeader, logInfo } from "../ui/reporter.js";
@@ -91,12 +92,13 @@ export async function runEphemeralTry(
     logInfo(`Provisioning ${fullPkg} (${ecosystem}) in zero-footprint sandbox...`);
   }
 
-  // 1. Node.js Ecosystem: prefer bunx -> fallback npx --yes
-  if (ecosystem === "npm") {
-    const hasBun = commandExists("bun");
-    const cmd = hasBun ? "bunx" : "npx";
-    const cmdArgs = hasBun ? [fullPkg, ...trailingArgs] : ["--yes", fullPkg, ...trailingArgs];
-    return executeEphemeral(cmd, cmdArgs);
+  // Delegate ecosystems registering an ephemeral runner (npm, jsr, conda, go, etc.)
+  const adapter = engineRegistry.getAdapter(ecosystem);
+  if (adapter?.resolveEphemeralCommand) {
+    const resolved = adapter.resolveEphemeralCommand(spec, trailingArgs, commandExists);
+    if (resolved) {
+      return executeEphemeral(resolved.command, resolved.args);
+    }
   }
 
   // 2. Python Ecosystem: prefer uvx -> fallback pipx run -> fallback temp venv

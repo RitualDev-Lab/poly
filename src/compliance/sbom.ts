@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { engineRegistry } from "../engines/registry.js";
 import { readCompositeLockfile } from "../workspace/lockfile.js";
 import { LicenseAuditor } from "./licenses.js";
 import type { SbomOptions } from "./types.js";
@@ -39,7 +40,7 @@ export class SbomGenerator {
     const serialUuid = crypto.randomUUID();
 
     const components = packages.map((pkg) => {
-      const purlEcosystem = pkg.ecosystem === "go" ? "golang" : pkg.ecosystem;
+      const purlEcosystem = engineRegistry.getSbomPurlType(pkg.ecosystem);
       return {
         type: "library",
         name: pkg.packageName,
@@ -88,7 +89,7 @@ export class SbomGenerator {
   ): string {
     const spdxPackages = packages.map((pkg, idx) => {
       const safeId = pkg.packageName.replace(/[^a-zA-Z0-9]/g, "-");
-      const purlEcosystem = pkg.ecosystem === "go" ? "golang" : pkg.ecosystem;
+      const purlEcosystem = engineRegistry.getSbomPurlType(pkg.ecosystem);
       return {
         name: pkg.packageName,
         SPDXID: `SPDXRef-Package-${safeId}-${idx}`,

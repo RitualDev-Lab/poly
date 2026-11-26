@@ -1,11 +1,5 @@
 import { detectContexts, resolvePrimaryContext } from "../detector/tree-walker.js";
-import {
-  type BaseEngine,
-  GoEngine,
-  NodeEngine,
-  PythonEngine,
-  RustEngine,
-} from "../engines/index.js";
+import { type BaseEngine, engineRegistry } from "../engines/index.js";
 import { parsePackageSpec } from "../purl/parser.js";
 import { RegistryRouter } from "../registry/index.js";
 import { evaluateSandboxGate, injectSandboxFlags } from "../sandbox/index.js";
@@ -299,13 +293,7 @@ export class PolyDispatcher {
    */
   which(ecosystem: Ecosystem, cwd?: string): { engine: string; effectiveCli: string } {
     const engine = this.getEngineForEcosystem(ecosystem, cwd ?? process.cwd());
-    let effectiveCli = engine.name;
-    if (engine instanceof NodeEngine) {
-      effectiveCli = engine.getEffectiveCli();
-    } else if (engine instanceof PythonEngine) {
-      effectiveCli = engine.getEffectiveCli();
-    }
-    return { engine: engine.name, effectiveCli };
+    return { engine: engine.name, effectiveCli: engine.getEffectiveCli() };
   }
 
   private async resolveEcosystemForPackage(
@@ -328,8 +316,8 @@ export class PolyDispatcher {
 
     throw new Error(
       `Could not determine ecosystem for '${packageName}'.\n` +
-        `No manifest (package.json, pyproject.toml, Cargo.toml, go.mod) was found in '${cwd}' or its parents.\n` +
-        `Remediation: Pass an explicit ecosystem prefix, e.g. 'npm:${packageName}' or 'pypi:${packageName}'.`,
+        `No manifest (package.json, deno.json, pyproject.toml, environment.yml, Cargo.toml, go.mod) was found in '${cwd}' or its parents.\n` +
+        `Remediation: Pass an explicit ecosystem prefix, e.g. 'npm:${packageName}', 'jsr:@scope/pkg', 'pypi:${packageName}', or 'conda:${packageName}'.`,
     );
   }
 
@@ -337,15 +325,11 @@ export class PolyDispatcher {
     const contexts = detectContexts(cwd);
     const ctx = contexts.find((c) => c.ecosystem === ecosystem);
 
-    switch (ecosystem) {
-      case "npm":
-        return new NodeEngine(ctx?.lockfile);
-      case "pypi":
-        return new PythonEngine(ctx?.lockfile);
-      case "cargo":
-        return new RustEngine();
-      case "go":
-        return new GoEngine();
-    }
+    return engineRegistry.createEngine(ecosystem, {
+      cwd,
+      ecosystem,
+      manifest: ctx?.manifestFile,
+      lockfile: ctx?.lockfile,
+    });
   }
 }

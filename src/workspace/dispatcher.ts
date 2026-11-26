@@ -1,4 +1,4 @@
-import { engineRegistry } from "../engines/index.js";
+import { engineRegistry } from "../engines/registry.js";
 import { RegistryRouter } from "../registry/index.js";
 import type { Ecosystem, ExecutionResult } from "../types.js";
 import { loadWorkspaceConfig, resolveWorkspaceMembers } from "./config.js";
@@ -45,6 +45,7 @@ export class WorkspaceDispatcher {
         const member = queue.shift();
         if (!member) break;
         const workerPromise = (async () => {
+          await engineRegistry.ensureLoaded(member.context.ecosystem);
           const engine = this.getEngine(
             member.context.ecosystem,
             member.context.manifestFile,

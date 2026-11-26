@@ -361,6 +361,41 @@ export class PolyDoctor {
         args: ["version"],
         hint: "https://github.com/Carthage/Carthage",
       },
+      {
+        id: "toolchain-cabal",
+        name: "Haskell Cabal",
+        cmd: "cabal",
+        args: ["--version"],
+        hint: "https://www.haskell.org/ghcup/",
+      },
+      {
+        id: "toolchain-stack",
+        name: "Haskell Stack",
+        cmd: "stack",
+        args: ["--version"],
+        hint: "https://docs.haskellstack.org",
+      },
+      {
+        id: "toolchain-rscript",
+        name: "R / Rscript",
+        cmd: "Rscript",
+        args: ["--version"],
+        hint: "https://cran.r-project.org",
+      },
+      {
+        id: "toolchain-cpanm",
+        name: "Perl cpanm",
+        cmd: "cpanm",
+        args: ["--version"],
+        hint: "https://cpanmin.us",
+      },
+      {
+        id: "toolchain-luarocks",
+        name: "LuaRocks",
+        cmd: "luarocks",
+        args: ["--version"],
+        hint: "https://luarocks.org",
+      },
     ];
 
     for (const tc of toolchains) {

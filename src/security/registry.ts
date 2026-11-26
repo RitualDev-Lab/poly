@@ -460,6 +460,133 @@ export async function fetchRegistryMetadata(
       return meta;
     }
 
+    if (ecosystem === "hackage") {
+      const res = await fetch(
+        `https://hackage.haskell.org/package/${encodeURIComponent(packageName)}/preferred.json`,
+        { signal: controller.signal, headers: { Accept: "application/json" } },
+      );
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as { "normal-version"?: string[] };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      const list = data["normal-version"] ?? [];
+      for (const v of list) {
+        versions[v] = { version: v, license: "BSD-3-CLAUSE" };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "hackage",
+        latestVersion: list[0],
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "cran") {
+      const res = await fetch(`https://crandb.r-pkg.org/${encodeURIComponent(packageName)}`, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        Version?: string;
+        License?: string;
+        "Date/Publication"?: string;
+      };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      if (data.Version) {
+        versions[data.Version] = {
+          version: data.Version,
+          publishedAt: data["Date/Publication"],
+          license: normalizeLicenseString(data.License),
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "cran",
+        latestVersion: data.Version,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "cpan") {
+      const dist = packageName.replace(/::/g, "-");
+      const res = await fetch(
+        `https://fastapi.metacpan.org/v1/release/${encodeURIComponent(dist)}`,
+        {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+        },
+      );
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        version?: string;
+        date?: string;
+        license?: string[];
+      };
+      const ver = data.version ? String(data.version).replace(/^v/, "") : undefined;
+      const versions: Record<string, PackageVersionMetadata> = {};
+      if (ver) {
+        versions[ver] = {
+          version: ver,
+          publishedAt: data.date,
+          license: normalizeLicenseString(data.license?.[0] ?? "Artistic-2.0"),
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "cpan",
+        latestVersion: ver,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "luarocks") {
+      const res = await fetch(
+        `https://luarocks.org/modules/luarocks/${encodeURIComponent(packageName)}.json`,
+        { signal: controller.signal, headers: { Accept: "application/json" } },
+      );
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        version?: string;
+        license?: string;
+        versions?: Array<{ version?: string; license?: string }>;
+      };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      const license = normalizeLicenseString(data.license ?? "MIT");
+      if (data.version) {
+        versions[data.version] = { version: data.version, license };
+      }
+      for (const item of data.versions ?? []) {
+        if (item.version) {
+          versions[item.version] = {
+            version: item.version,
+            license: normalizeLicenseString(item.license ?? license),
+          };
+        }
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "luarocks",
+        latestVersion: data.version ?? data.versions?.[0]?.version,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
     clearTimeout(timer);
     return null;
   } catch {

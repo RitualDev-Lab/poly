@@ -90,7 +90,7 @@ COMMANDS:
   mcp [install]       Start stdio MCP server or 1-click install for Claude Desktop, Cursor, Windsurf
   init [--ide]        Initialize workspace or generate AI agent guidelines (.cursorrules, CLAUDE.md)
   completion <shell>  Generate native shell tab auto-completion (bash, zsh, fish, powershell)
-  which <ecosystem>   Show active CLI binary for an ecosystem (npm, jsr, pypi, conda, cargo, go, nuget, composer, gem, pub, conan, vcpkg, meson, julia, maven, gradle, sbt, hex, rebar3, swift, cocoapods, carthage)
+  which <ecosystem>   Show active CLI binary for an ecosystem (npm, jsr, pypi, conda, cargo, go, nuget, composer, gem, pub, conan, vcpkg, meson, julia, maven, gradle, sbt, hex, rebar3, swift, cocoapods, carthage, hackage, cran, cpan, luarocks)
 
 OPTIONS:
   -D, --dev           Install as a development dependency
@@ -1075,6 +1075,7 @@ async function main(): Promise<void> {
           process.exit(1);
         }
 
+        await engineRegistry.ensureLoaded(resolved);
         const dispatcher = new PolyDispatcher();
         const info = dispatcher.which(resolved, cwd);
         if (isJson) {

@@ -1,5 +1,6 @@
 import fs from "node:fs";
-import type { Ecosystem, EngineContext, PackageSpec } from "../types.js";
+import type { Ecosystem, EngineContext } from "../types.js";
+import { BACKEND_MOBILE_ADAPTERS } from "./backend-mobile.js";
 import type { BaseEngine } from "./base.js";
 import { type EngineAdapter, defineDeclarativeAdapter } from "./declarative.js";
 import { GoEngine } from "./go.js";
@@ -286,6 +287,9 @@ engineRegistry.register(pypiAdapter);
 engineRegistry.register(condaAdapter);
 engineRegistry.register(cargoAdapter);
 engineRegistry.register(goAdapter);
+for (const adapter of BACKEND_MOBILE_ADAPTERS) {
+  engineRegistry.register(adapter);
+}
 
 /** Ensures a PackageSpec target cleanly detects its first existing manifest file in cwd if missing. */
 export function resolveEcosystemLockContext(ecosystem: Ecosystem, cwd: string): EngineContext {

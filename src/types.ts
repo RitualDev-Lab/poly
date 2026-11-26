@@ -3,7 +3,17 @@
  * Universal Package & Dependency Orchestration Specification
  */
 
-export type BuiltinEcosystem = "npm" | "jsr" | "pypi" | "conda" | "cargo" | "go";
+export type BuiltinEcosystem =
+  | "npm"
+  | "jsr"
+  | "pypi"
+  | "conda"
+  | "cargo"
+  | "go"
+  | "nuget"
+  | "composer"
+  | "gem"
+  | "pub";
 export type Ecosystem = BuiltinEcosystem | (string & {});
 
 export interface EngineContext {

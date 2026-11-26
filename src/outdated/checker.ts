@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Ecosystem } from "../types.js";
 import { resolveWorkspaceMembers } from "../workspace/config.js";
+import { extractBackendMobileDependencies } from "../workspace/crypto.js";
 import { compareSemver } from "./semver.js";
 import type { OutdatedDependency, OutdatedScanReport } from "./types.js";
 
@@ -137,6 +138,118 @@ async function fetchGoLatest(name: string): Promise<string | null> {
   }
 }
 
+async function fetchNugetLatest(name: string): Promise<string | null> {
+  const cacheKey = `nuget:${name.toLowerCase()}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(
+      `https://api.nuget.org/v3-flatcontainer/${encodeURIComponent(name.toLowerCase())}/index.json`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { versions?: string[] };
+    const stable = (data.versions ?? []).filter((v) => !v.includes("-"));
+    const latest = stable[stable.length - 1] ?? data.versions?.[data.versions.length - 1] ?? null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchComposerLatest(name: string): Promise<string | null> {
+  const pkgKey = name.toLowerCase();
+  const cacheKey = `composer:${pkgKey}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://repo.packagist.org/p2/${pkgKey}.json`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as {
+      packages?: Record<string, Array<{ version?: string }>>;
+    };
+    const list = data.packages?.[pkgKey] ?? Object.values(data.packages ?? {})[0] ?? [];
+    const stable = list.find(
+      (v) => v.version && !v.version.includes("dev") && !v.version.includes("-"),
+    );
+    const latest = (stable?.version ?? list[0]?.version)?.replace(/^v/, "") || null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchGemLatest(name: string): Promise<string | null> {
+  const cacheKey = `gem:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(
+      `https://rubygems.org/api/v1/versions/${encodeURIComponent(name)}.json`,
+      {
+        signal: controller.signal,
+      },
+    );
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const items = (await res.json()) as Array<{ number?: string; prerelease?: boolean }>;
+    const latest = items.find((i) => i.number && !i.prerelease)?.number ?? items[0]?.number ?? null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
+async function fetchPubLatest(name: string): Promise<string | null> {
+  const cacheKey = `pub:${name}`;
+  if (REGISTRY_CACHE.has(cacheKey)) return REGISTRY_CACHE.get(cacheKey) || null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const res = await fetch(`https://pub.dev/api/packages/${encodeURIComponent(name)}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      REGISTRY_CACHE.set(cacheKey, null);
+      return null;
+    }
+    const data = (await res.json()) as { latest?: { version?: string } };
+    const latest = data.latest?.version || null;
+    REGISTRY_CACHE.set(cacheKey, latest);
+    return latest;
+  } catch {
+    REGISTRY_CACHE.set(cacheKey, null);
+    return null;
+  }
+}
+
 /**
  * Dispatches to registry fetcher based on ecosystem.
  */
@@ -153,6 +266,14 @@ export async function fetchLatestVersion(
       return fetchCratesLatest(name);
     case "go":
       return fetchGoLatest(name);
+    case "nuget":
+      return fetchNugetLatest(name);
+    case "composer":
+      return fetchComposerLatest(name);
+    case "gem":
+      return fetchGemLatest(name);
+    case "pub":
+      return fetchPubLatest(name);
     default:
       return null;
   }
@@ -287,6 +408,22 @@ function extractDeclaredDependencies(
             });
           }
         }
+      }
+      break;
+    }
+
+    case "nuget":
+    case "composer":
+    case "gem":
+    case "pub": {
+      for (const item of extractBackendMobileDependencies(manifestPath, content, ecosystem)) {
+        if (item.version === "any" || item.version === "latest") continue;
+        deps.push({
+          name: item.name,
+          version: item.version,
+          ecosystem: item.ecosystem,
+          memberPath,
+        });
       }
       break;
     }

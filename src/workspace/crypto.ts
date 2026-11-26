@@ -3,6 +3,105 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Ecosystem } from "../types.js";
 
+export interface ParsedManifestDep {
+  name: string;
+  version: string;
+  ecosystem: Ecosystem;
+}
+
+/**
+ * Extracts dependency name/version pairs for Phase 2 backend & mobile ecosystems
+ * (NuGet/Paket, Composer, RubyGems/Bundler, Dart/Flutter Pub).
+ */
+export function extractBackendMobileDependencies(
+  manifestPath: string,
+  content: string,
+  ecosystem: Ecosystem,
+): ParsedManifestDep[] {
+  const deps: ParsedManifestDep[] = [];
+  const fileName = path.basename(manifestPath);
+
+  if (ecosystem === "nuget") {
+    if (/\.(cs|fs|vb)proj$/i.test(fileName)) {
+      const refTags = content.match(/<PackageReference\b[^>]*>/gi) ?? [];
+      for (const tag of refTags) {
+        const inc = tag.match(/\bInclude=["']([^"']+)["']/i)?.[1];
+        const ver = tag.match(/\bVersion=["']([^"']+)["']/i)?.[1];
+        if (inc) {
+          deps.push({ name: inc.trim(), version: (ver || "latest").trim(), ecosystem: "nuget" });
+        }
+      }
+    } else if (fileName === "paket.dependencies") {
+      for (const line of content.split("\n")) {
+        const match = line.trim().match(/^nuget\s+([^\s]+)(?:\s+(.+))?$/i);
+        if (match) {
+          deps.push({
+            name: match[1].trim(),
+            version: (match[2] || "latest").trim(),
+            ecosystem: "nuget",
+          });
+        }
+      }
+    }
+  } else if (ecosystem === "composer" && fileName === "composer.json") {
+    try {
+      const json = JSON.parse(content) as {
+        require?: Record<string, string>;
+        "require-dev"?: Record<string, string>;
+      };
+      for (const section of [json.require, json["require-dev"]]) {
+        if (!section) continue;
+        for (const [name, ver] of Object.entries(section)) {
+          if (name === "php" || name === "composer-plugin-api" || /^(ext|lib)-/i.test(name)) {
+            continue;
+          }
+          deps.push({ name, version: String(ver), ecosystem: "composer" });
+        }
+      }
+    } catch {
+      // Ignore malformed JSON
+    }
+  } else if (ecosystem === "gem") {
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const gemMatch =
+        fileName === "Gemfile"
+          ? trimmed.match(/^gem\s+["']([^"']+)["'](?:\s*,\s*["']([^"']+)["'])?/)
+          : trimmed.match(
+              /\.add_(?:runtime_|development_)?dependency\s*\(?\s*["']([^"']+)["'](?:\s*,\s*["']([^"']+)["'])?/,
+            );
+      if (gemMatch) {
+        deps.push({
+          name: gemMatch[1],
+          version: (gemMatch[2] || "latest").trim(),
+          ecosystem: "gem",
+        });
+      }
+    }
+  } else if (ecosystem === "pub" && fileName === "pubspec.yaml") {
+    let inDeps = false;
+    for (const rawLine of content.split("\n")) {
+      const trimmed = rawLine.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const indent = rawLine.search(/\S|$/);
+      if (indent === 0) {
+        inDeps = trimmed === "dependencies:" || trimmed === "dev_dependencies:";
+        continue;
+      }
+      if (!inDeps || indent !== 2) continue;
+      if (trimmed.startsWith("flutter:") || trimmed.startsWith("sdk:")) continue;
+      const depMatch = trimmed.match(/^([a-zA-Z0-9_]+)\s*:\s*([^\s#]+)?/);
+      if (depMatch && depMatch[1] !== "flutter" && depMatch[1] !== "flutter_test") {
+        const ver = depMatch[2]?.replace(/["']/g, "") || "any";
+        deps.push({ name: depMatch[1], version: ver, ecosystem: "pub" });
+      }
+    }
+  }
+
+  return deps;
+}
+
 /**
  * Computes a standardized SHA-256 digest of a file.
  */
@@ -225,6 +324,16 @@ export function extractDirectDependencies(manifestPath: string, ecosystem: Ecosy
             deps.push(`go:${parts[0]}@${parts[1]}`);
           }
         }
+      }
+      break;
+    }
+
+    case "nuget":
+    case "composer":
+    case "gem":
+    case "pub": {
+      for (const item of extractBackendMobileDependencies(manifestPath, content, ecosystem)) {
+        deps.push(`${item.ecosystem}:${item.name}@${item.version}`);
       }
       break;
     }

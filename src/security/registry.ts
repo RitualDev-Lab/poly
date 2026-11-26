@@ -170,6 +170,150 @@ export async function fetchRegistryMetadata(
       return meta;
     }
 
+    if (ecosystem === "nuget") {
+      const res = await fetch(
+        `https://api.nuget.org/v3/registration5-semver1/${encodeURIComponent(packageName.toLowerCase())}/index.json`,
+        { signal: controller.signal, headers: { Accept: "application/json" } },
+      );
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        items?: Array<{
+          items?: Array<{
+            catalogEntry?: {
+              version?: string;
+              published?: string;
+              licenseExpression?: string;
+            };
+          }>;
+        }>;
+      };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      let latestVersion: string | undefined;
+      for (const page of data.items ?? []) {
+        for (const entry of page.items ?? []) {
+          const cat = entry.catalogEntry;
+          if (!cat?.version) continue;
+          latestVersion = cat.version;
+          versions[cat.version] = {
+            version: cat.version,
+            publishedAt: cat.published,
+            license: normalizeLicenseString(cat.licenseExpression),
+          };
+        }
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "nuget",
+        latestVersion,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "composer") {
+      const pkgKey = packageName.toLowerCase();
+      const res = await fetch(`https://repo.packagist.org/p2/${pkgKey}.json`, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        packages?: Record<string, Array<{ version?: string; time?: string; license?: string[] }>>;
+      };
+      const entries = data.packages?.[pkgKey] ?? Object.values(data.packages ?? {})[0] ?? [];
+      const versions: Record<string, PackageVersionMetadata> = {};
+      let latestVersion: string | undefined;
+      for (const item of entries) {
+        if (!item.version || item.version.includes("dev")) continue;
+        const clean = item.version.replace(/^v/, "");
+        if (!latestVersion) latestVersion = clean;
+        versions[clean] = {
+          version: clean,
+          publishedAt: item.time,
+          license: normalizeLicenseString(item.license?.[0]),
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "composer",
+        latestVersion,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "gem") {
+      const res = await fetch(
+        `https://rubygems.org/api/v1/versions/${encodeURIComponent(packageName)}.json`,
+        { signal: controller.signal, headers: { Accept: "application/json" } },
+      );
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const items = (await res.json()) as Array<{
+        number?: string;
+        created_at?: string;
+        licenses?: string[];
+        prerelease?: boolean;
+      }>;
+      const versions: Record<string, PackageVersionMetadata> = {};
+      let latestVersion: string | undefined;
+      for (const item of items) {
+        if (!item.number) continue;
+        if (!latestVersion && !item.prerelease) latestVersion = item.number;
+        versions[item.number] = {
+          version: item.number,
+          publishedAt: item.created_at,
+          license: normalizeLicenseString(item.licenses?.[0]),
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "gem",
+        latestVersion,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
+    if (ecosystem === "pub") {
+      const res = await fetch(`https://pub.dev/api/packages/${encodeURIComponent(packageName)}`, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as {
+        latest?: { version?: string; published?: string };
+        versions?: Array<{ version?: string; published?: string }>;
+      };
+      const versions: Record<string, PackageVersionMetadata> = {};
+      for (const v of data.versions ?? []) {
+        if (!v.version) continue;
+        versions[v.version] = {
+          version: v.version,
+          publishedAt: v.published,
+          license: "BSD-3-CLAUSE",
+        };
+      }
+      const meta: RegistryMetadata = {
+        name: packageName,
+        ecosystem: "pub",
+        latestVersion: data.latest?.version,
+        versions,
+      };
+      REGISTRY_CACHE.set(cacheKey, meta);
+      return meta;
+    }
+
     clearTimeout(timer);
     return null;
   } catch {

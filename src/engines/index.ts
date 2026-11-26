@@ -1,5 +1,12 @@
 export { BaseEngine } from "./base.js";
 export {
+  BACKEND_MOBILE_ADAPTERS,
+  composerAdapter,
+  gemAdapter,
+  nugetAdapter,
+  pubAdapter,
+} from "./backend-mobile.js";
+export {
   DeclarativeEngine,
   defineDeclarativeAdapter,
   type DeclarativeCommandSpec,

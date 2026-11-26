@@ -73,7 +73,7 @@ export class OsvClient {
         name: pkg.name,
         ecosystem: osvEcosystem,
       },
-      version: pkg.version.replace(/^[~^>=<]/, "").trim(),
+      version: pkg.version.replace(/^[~^>=<\s]+/, "").trim(),
     }));
 
     try {

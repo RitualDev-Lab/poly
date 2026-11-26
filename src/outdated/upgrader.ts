@@ -16,20 +16,18 @@ export function patchManifestVersion(
   if (!fs.existsSync(manifestPath)) return false;
   const content = fs.readFileSync(manifestPath, "utf-8");
 
-  // 1. JSON (package.json)
+  // 1. JSON (package.json, composer.json)
   if (manifestPath.endsWith(".json")) {
     try {
       const json = JSON.parse(content);
       let modified = false;
       const cleanVer = `^${newVersion.replace(/^[\^~><=v]+/, "")}`;
 
-      if (json.dependencies?.[pkgName]) {
-        json.dependencies[pkgName] = cleanVer;
-        modified = true;
-      }
-      if (json.devDependencies?.[pkgName]) {
-        json.devDependencies[pkgName] = cleanVer;
-        modified = true;
+      for (const field of ["dependencies", "devDependencies", "require", "require-dev"] as const) {
+        if (json[field]?.[pkgName]) {
+          json[field][pkgName] = cleanVer;
+          modified = true;
+        }
       }
 
       if (modified) {
@@ -38,6 +36,44 @@ export function patchManifestVersion(
       }
     } catch {
       return false;
+    }
+  }
+
+  // 1b. .NET Project XML (*.csproj, *.fsproj, *.vbproj)
+  if (/\.(cs|fs|vb)proj$/i.test(manifestPath)) {
+    const cleanVer = newVersion.replace(/^[\^~><=v]+/, "");
+    const escapedPkg = pkgName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(
+      `(<PackageReference\\b[^>]*Include=["']${escapedPkg}["'][^>]*Version=["'])([^"']+)(["'][^>]*>)`,
+      "i",
+    );
+    if (regex.test(content)) {
+      const updated = content.replace(regex, `$1${cleanVer}$3`);
+      fs.writeFileSync(manifestPath, updated, "utf-8");
+      return true;
+    }
+  }
+
+  // 1c. Dart / Flutter pubspec.yaml or Ruby Gemfile
+  if (manifestPath.endsWith("pubspec.yaml")) {
+    const cleanVer = `^${newVersion.replace(/^[\^~><=v]+/, "")}`;
+    const escapedPkg = pkgName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`^(\\s+${escapedPkg}\\s*:\\s*)([^\\s#]+)`, "m");
+    if (regex.test(content)) {
+      const updated = content.replace(regex, `$1${cleanVer}`);
+      fs.writeFileSync(manifestPath, updated, "utf-8");
+      return true;
+    }
+  }
+
+  if (manifestPath.endsWith("Gemfile")) {
+    const cleanVer = `~> ${newVersion.replace(/^[\^~><=v\s]+/, "")}`;
+    const escapedPkg = pkgName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`^(\\s*gem\\s+["']${escapedPkg}["']\\s*,\\s*["'])([^"']+)(["'])`, "m");
+    if (regex.test(content)) {
+      const updated = content.replace(regex, `$1${cleanVer}$3`);
+      fs.writeFileSync(manifestPath, updated, "utf-8");
+      return true;
     }
   }
 
